@@ -48,10 +48,11 @@ Update `~/.claude/settings.json` `statusLine` to:
 }
 ```
 
-## Step 3: Enable git hooks (optional)
+## Step 3: Enable git hooks (optional, local dev only)
 
-Ask the user if they want to enable auto-version-bump git hooks for development.
+Only if the plugin was resolved from the repo working directory (option 3 in Step 2), ask the user if they want to enable auto-version-bump git hooks for development.
 If yes, run: `git config core.hooksPath githooks` in the plugin repo directory.
+If the plugin was installed from marketplace (options 1 or 2), skip this step entirely.
 
 ## Step 4: Confirm
 
