@@ -1,0 +1,117 @@
+#!/usr/bin/env bash
+#
+# post-commit hook: auto-bump plugin version based on conventional commit prefix.
+# Only bumps when committed files include actual plugin files (not docs/readme/etc).
+# Amends the commit to include the version bump.
+#
+# Tags: feat/BREAKING CHANGE → auto tag. fix/chore → no tag. [release] → forced tag.
+# Skip: [skip-bump] in commit message.
+# Setup: git config core.hooksPath githooks
+
+# Prevent infinite loop (amend triggers post-commit again)
+LOCK_FILE="$(git rev-parse --git-dir)/.version-bump-lock"
+if [ -f "$LOCK_FILE" ]; then
+  rm -f "$LOCK_FILE"
+  exit 0
+fi
+
+# Plugin files that warrant a version bump
+PLUGIN_FILES_PATTERN='^\.claude-plugin/plugin\.json$|^commands/|^scripts/'
+
+# Check which files changed in this commit
+CHANGED=$(git diff-tree --no-commit-id --name-only -r HEAD 2>/dev/null)
+PLUGIN_CHANGED=$(echo "$CHANGED" | grep -E "$PLUGIN_FILES_PATTERN" || true)
+
+if [ -z "$PLUGIN_CHANGED" ]; then
+  exit 0
+fi
+
+# Get commit message
+COMMIT_MSG=$(git log -1 --format=%B)
+
+# Skip if commit message contains [skip-bump]
+if echo "$COMMIT_MSG" | grep -q '\[skip-bump\]'; then
+  exit 0
+fi
+
+# Determine bump type from commit message prefix
+BUMP="patch"
+if echo "$COMMIT_MSG" | grep -qi "BREAKING CHANGE"; then
+  BUMP="major"
+elif echo "$COMMIT_MSG" | grep -qE "^feat(\(.*\))?:"; then
+  BUMP="minor"
+fi
+
+# Read current version from plugin.json
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+PLUGIN_JSON="${REPO_ROOT}/.claude-plugin/plugin.json"
+MARKETPLACE_JSON="${REPO_ROOT}/.claude-plugin/marketplace.json"
+
+if [ ! -f "$PLUGIN_JSON" ]; then
+  exit 0
+fi
+
+# Extract version (portable: no grep -P, works on macOS/Linux/Windows)
+CURRENT_VERSION=$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([0-9]*\.[0-9]*\.[0-9]*\)".*/\1/p' "$PLUGIN_JSON" | head -1)
+
+if [ -z "$CURRENT_VERSION" ]; then
+  exit 0
+fi
+
+# Parse semver
+IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT_VERSION"
+
+# Bump
+case "$BUMP" in
+  major)
+    MAJOR=$((MAJOR + 1))
+    MINOR=0
+    PATCH=0
+    ;;
+  minor)
+    MINOR=$((MINOR + 1))
+    PATCH=0
+    ;;
+  patch)
+    PATCH=$((PATCH + 1))
+    ;;
+esac
+
+NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}"
+
+if [ "$NEW_VERSION" = "$CURRENT_VERSION" ]; then
+  exit 0
+fi
+
+# Update version in files (portable sed -i: works on macOS and Linux)
+if sed --version >/dev/null 2>&1; then
+  # GNU sed (Linux, Windows/Git Bash)
+  sed -i "s/\"version\": \"${CURRENT_VERSION}\"/\"version\": \"${NEW_VERSION}\"/" "$PLUGIN_JSON"
+  [ -f "$MARKETPLACE_JSON" ] && sed -i "s/\"version\": \"${CURRENT_VERSION}\"/\"version\": \"${NEW_VERSION}\"/" "$MARKETPLACE_JSON"
+else
+  # BSD sed (macOS)
+  sed -i '' "s/\"version\": \"${CURRENT_VERSION}\"/\"version\": \"${NEW_VERSION}\"/" "$PLUGIN_JSON"
+  [ -f "$MARKETPLACE_JSON" ] && sed -i '' "s/\"version\": \"${CURRENT_VERSION}\"/\"version\": \"${NEW_VERSION}\"/" "$MARKETPLACE_JSON"
+fi
+
+# Set lock to prevent infinite loop, then amend
+touch "$LOCK_FILE"
+git add "$PLUGIN_JSON"
+[ -f "$MARKETPLACE_JSON" ] && git add "$MARKETPLACE_JSON"
+git commit --amend --no-edit
+
+# Tag releases: feat/BREAKING CHANGE → auto, [release] → forced, patches → no tag
+CREATE_TAG=false
+if [ "$BUMP" = "major" ] || [ "$BUMP" = "minor" ]; then
+  CREATE_TAG=true
+fi
+if echo "$COMMIT_MSG" | grep -q '\[release\]'; then
+  CREATE_TAG=true
+fi
+
+if [ "$CREATE_TAG" = true ]; then
+  git tag "v${NEW_VERSION}"
+  echo "claude-statusline: ${CURRENT_VERSION} -> ${NEW_VERSION} (${BUMP}) tagged v${NEW_VERSION}"
+else
+  echo "claude-statusline: ${CURRENT_VERSION} -> ${NEW_VERSION} (${BUMP})"
+fi

@@ -1,0 +1,26 @@
+{
+  "name": "claude-statusline-marketplace",
+  "owner": {
+    "name": "Dariusz Mikulski",
+    "email": "dariusz.mikulski@gmail.com"
+  },
+  "metadata": {
+    "description": "Custom statusline plugin for Claude Code with rate limit monitoring"
+  },
+  "plugins": [
+    {
+      "name": "claude-statusline",
+      "source": "./",
+      "description": "Custom statusline with context usage bar, token count, session time, and Claude rate limit monitoring via claude-dashboard",
+      "version": "1.0.0",
+      "author": {
+        "name": "Dariusz Mikulski"
+      },
+      "homepage": "https://github.com/malcolmpl/claude-statusline",
+      "repository": "https://github.com/malcolmpl/claude-statusline",
+      "license": "MIT",
+      "keywords": ["statusline", "context", "usage", "tokens", "limits", "dashboard"],
+      "category": "monitoring"
+    }
+  ]
+}
