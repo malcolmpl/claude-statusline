@@ -109,11 +109,17 @@ def get_claude_usage():
     return None
 
 
-def fmt_resets_in(iso_str):
-    """Return 'Xd Xh' or 'Xh Xm' or 'Xm' until an ISO timestamp."""
+def fmt_resets_in(value):
+    """Return 'Xd Xh' or 'Xh Xm' or 'Xm' until a reset time.
+
+    Accepts ISO timestamp string or Unix epoch seconds (int/float).
+    """
     try:
         from datetime import datetime, timezone
-        target = datetime.fromisoformat(iso_str.replace("Z", "+00:00"))
+        if isinstance(value, (int, float)):
+            target = datetime.fromtimestamp(value, tz=timezone.utc)
+        else:
+            target = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
         now = datetime.now(timezone.utc)
         secs = int((target - now).total_seconds())
         if secs <= 0:
@@ -188,15 +194,17 @@ def main():
     duration_ms = (data.get("cost") or {}).get("total_duration_ms", 0) or 0
     session_time = fmt_duration(duration_ms)
 
-    # Claude usage limits
-    usage = get_claude_usage()
+    # Claude usage limits — prefer stdin rate_limits, fallback to check-usage.js
+    rl = data.get("rate_limits") or {}
     usage_parts = []
-    if usage and usage.get("claude") and not usage["claude"].get("error"):
-        cl = usage["claude"]
-        s_pct = cl.get("fiveHourPercent", 0)
-        w_pct = cl.get("sevenDayPercent", 0)
-        s_reset = fmt_resets_in(cl["fiveHourReset"]) if cl.get("fiveHourReset") else "?"
-        w_reset = fmt_resets_in(cl["sevenDayReset"]) if cl.get("sevenDayReset") else "?"
+    if rl.get("five_hour") or rl.get("seven_day"):
+        # Native rate_limits from Claude Code stdin
+        fh = rl.get("five_hour") or {}
+        sd = rl.get("seven_day") or {}
+        s_pct = fh.get("used_percentage", 0) or 0
+        w_pct = sd.get("used_percentage", 0) or 0
+        s_reset = fmt_resets_in(fh["resets_at"]) if fh.get("resets_at") else "?"
+        w_reset = fmt_resets_in(sd["resets_at"]) if sd.get("resets_at") else "?"
         s_col = color_for_pct(s_pct)
         w_col = color_for_pct(w_pct)
         s_bar = make_bar(s_pct)
@@ -207,6 +215,25 @@ def main():
         usage_parts.append(
             f"{w_col}weekly: {w_bar} {w_pct}% {DIM}resets {w_reset}{RESET}"
         )
+    else:
+        # Fallback: check-usage.js from claude-dashboard
+        usage = get_claude_usage()
+        if usage and usage.get("claude") and not usage["claude"].get("error"):
+            cl = usage["claude"]
+            s_pct = cl.get("fiveHourPercent", 0)
+            w_pct = cl.get("sevenDayPercent", 0)
+            s_reset = fmt_resets_in(cl["fiveHourReset"]) if cl.get("fiveHourReset") else "?"
+            w_reset = fmt_resets_in(cl["sevenDayReset"]) if cl.get("sevenDayReset") else "?"
+            s_col = color_for_pct(s_pct)
+            w_col = color_for_pct(w_pct)
+            s_bar = make_bar(s_pct)
+            w_bar = make_bar(w_pct)
+            usage_parts.append(
+                f"{s_col}session: {s_bar} {s_pct}% {DIM}resets {s_reset}{RESET}"
+            )
+            usage_parts.append(
+                f"{w_col}weekly: {w_bar} {w_pct}% {DIM}resets {w_reset}{RESET}"
+            )
 
     # Assemble
     sep = f" {DIM}|{RESET} "
