@@ -5,7 +5,6 @@ import json
 import sys
 import os
 import subprocess
-import time
 
 # Force UTF-8 output on Windows
 if sys.platform == "win32":
@@ -62,51 +61,6 @@ def get_git_branch(cwd):
         pass
     return None
 
-
-CHECK_USAGE_SCRIPT = os.path.join(
-    os.path.expanduser("~"), ".claude", "plugins", "cache",
-    "claude-dashboard", "claude-dashboard"
-)
-USAGE_CACHE_FILE = os.path.join(os.path.expanduser("~"), ".claude", "usage_cache.json")
-USAGE_CACHE_TTL = 120  # seconds
-
-
-def get_claude_usage():
-    """Fetch Claude usage via check-usage.js, with file-based cache."""
-    now = time.time()
-
-    # Try cache first
-    if os.path.exists(USAGE_CACHE_FILE):
-        try:
-            with open(USAGE_CACHE_FILE) as f:
-                cached = json.load(f)
-            if now - cached.get("_ts", 0) < USAGE_CACHE_TTL:
-                return cached
-        except Exception:
-            pass
-
-    # Find latest version of the script
-    try:
-        versions = sorted(os.listdir(CHECK_USAGE_SCRIPT))
-        if not versions:
-            return None
-        script = os.path.join(CHECK_USAGE_SCRIPT, versions[-1], "dist", "check-usage.js")
-        result = subprocess.run(
-            ["node", script, "--json"],
-            capture_output=True, text=True, timeout=5, **_SUBPROCESS_KWARGS,
-        )
-        if result.returncode == 0:
-            data = json.loads(result.stdout)
-            data["_ts"] = now
-            try:
-                with open(USAGE_CACHE_FILE, "w") as f:
-                    json.dump(data, f)
-            except Exception:
-                pass
-            return data
-    except Exception:
-        pass
-    return None
 
 
 def fmt_resets_in(value):
@@ -215,25 +169,6 @@ def main():
         usage_parts.append(
             f"{w_col}weekly: {w_bar} {w_pct}% {DIM}resets {w_reset}{RESET}"
         )
-    else:
-        # Fallback: check-usage.js from claude-dashboard
-        usage = get_claude_usage()
-        if usage and usage.get("claude") and not usage["claude"].get("error"):
-            cl = usage["claude"]
-            s_pct = cl.get("fiveHourPercent", 0)
-            w_pct = cl.get("sevenDayPercent", 0)
-            s_reset = fmt_resets_in(cl["fiveHourReset"]) if cl.get("fiveHourReset") else "?"
-            w_reset = fmt_resets_in(cl["sevenDayReset"]) if cl.get("sevenDayReset") else "?"
-            s_col = color_for_pct(s_pct)
-            w_col = color_for_pct(w_pct)
-            s_bar = make_bar(s_pct)
-            w_bar = make_bar(w_pct)
-            usage_parts.append(
-                f"{s_col}session: {s_bar} {s_pct}% {DIM}resets {s_reset}{RESET}"
-            )
-            usage_parts.append(
-                f"{w_col}weekly: {w_bar} {w_pct}% {DIM}resets {w_reset}{RESET}"
-            )
 
     # Assemble
     sep = f" {DIM}|{RESET} "
