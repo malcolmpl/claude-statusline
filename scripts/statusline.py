@@ -155,8 +155,8 @@ def main():
         # Native rate_limits from Claude Code stdin
         fh = rl.get("five_hour") or {}
         sd = rl.get("seven_day") or {}
-        s_pct = fh.get("used_percentage", 0) or 0
-        w_pct = sd.get("used_percentage", 0) or 0
+        s_pct = round(fh.get("used_percentage", 0) or 0, 2)
+        w_pct = round(sd.get("used_percentage", 0) or 0, 2)
         s_reset = fmt_resets_in(fh["resets_at"]) if fh.get("resets_at") else "?"
         w_reset = fmt_resets_in(sd["resets_at"]) if sd.get("resets_at") else "?"
         s_col = color_for_pct(s_pct)
