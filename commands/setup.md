@@ -1,35 +1,15 @@
 ---
 name: setup
-description: Install and configure the custom statusline (auto-installs claude-dashboard dependency)
+description: Install and configure the custom statusline
 argument-hint: ""
-allowed-tools: Read, Write, Edit, Bash(jq:*), Bash(cat:*), Bash(mkdir:*), Bash(node:*), Bash(ls:*), AskUserQuestion
+allowed-tools: Read, Write, Edit, Bash(python3:*), Bash(python:*), Bash(cat:*), Bash(mkdir:*), Bash(ls:*), AskUserQuestion
 ---
 
 # Setup Statusline Plugin
 
 Follow these steps exactly in order.
 
-## Step 1: Ensure claude-dashboard dependency
-
-Read `~/.claude/settings.json`.
-
-Check if BOTH conditions are met:
-1. `extraKnownMarketplaces` has `"claude-dashboard"` with source `"uppinote20/claude-dashboard"`
-2. `enabledPlugins` has `"claude-dashboard@claude-dashboard": true`
-
-If either is missing, add them to `settings.json` using the Edit tool.
-
-Then check if `~/.claude/plugins/cache/claude-dashboard/claude-dashboard/` exists and has version subdirectories:
-```
-ls ~/.claude/plugins/cache/claude-dashboard/claude-dashboard/
-```
-
-If the directory doesn't exist or is empty, tell the user:
-> claude-dashboard configured but not yet downloaded. Restart Claude Code, then run `/claude-statusline:setup` again.
-
-Then STOP — do not continue to further steps.
-
-## Step 2: Configure statusline command
+## Step 1: Configure statusline command
 
 Determine this plugin's install path. The statusline script is at `scripts/statusline.py` relative to the plugin root.
 
@@ -48,13 +28,13 @@ Update `~/.claude/settings.json` `statusLine` to:
 }
 ```
 
-## Step 3: Enable git hooks (optional, local dev only)
+## Step 2: Enable git hooks (optional, local dev only)
 
-Only if the plugin was resolved from the repo working directory (option 3 in Step 2), ask the user if they want to enable auto-version-bump git hooks for development.
+Only if the plugin was resolved from the repo working directory (option 3 in Step 1), ask the user if they want to enable auto-version-bump git hooks for development.
 If yes, run: `git config core.hooksPath githooks` in the plugin repo directory.
 If the plugin was installed from marketplace (options 1 or 2), skip this step entirely.
 
-## Step 4: Confirm
+## Step 3: Confirm
 
 Tell the user setup is complete. The statusline shows:
 - Working directory, git branch, model name
