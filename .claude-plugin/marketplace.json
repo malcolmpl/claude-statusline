@@ -12,7 +12,7 @@
       "name": "claude-statusline",
       "source": "./",
       "description": "Statusline with cache_creation per-turn tracking, context usage, tokens, session time, rate limits, plus /cache-stats analyzer",
-      "version": "1.1.0",
+      "version": "1.1.1",
       "author": {
         "name": "Dariusz Mikulski"
       },

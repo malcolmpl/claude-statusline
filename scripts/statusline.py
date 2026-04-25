@@ -249,11 +249,10 @@ def main():
         is_ttl = is_ttl_refresh(cc_info["cc"], cc_info["prev_cache_read"])
         cc_segment = render_cc_segment(cc_info["cc"], cc_info["is_first_turn"], is_ttl=is_ttl)
 
-    # Claude usage limits — prefer stdin rate_limits, fallback to check-usage.js
+    # Claude usage limits — native rate_limits from Claude Code stdin
     rl = data.get("rate_limits") or {}
     usage_parts = []
     if rl.get("five_hour") or rl.get("seven_day"):
-        # Native rate_limits from Claude Code stdin
         fh = rl.get("five_hour") or {}
         sd = rl.get("seven_day") or {}
         s_pct = round(fh.get("used_percentage", 0) or 0, 2)
