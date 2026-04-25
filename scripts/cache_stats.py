@@ -4,6 +4,7 @@
 import json
 import os
 import sys
+from statusline import TTL_RATIO, TTL_MIN_PREV
 
 
 RED   = "\033[31m"
@@ -62,10 +63,6 @@ def _first_tool_name(content):
     return None
 
 
-TTL_RATIO = 0.8
-TTL_MIN_PREV = 5000
-
-
 def _classify_turn(turn, prev_cache_read):
     """Return 'init' | 'ttl' | 'data_load' | 'normal'."""
     cc = turn["cc"]
@@ -107,6 +104,7 @@ def summarize(analysis):
     return out
 
 
+# keep in sync with statusline.fmt_k
 def _fmt_k(n):
     if n < 1000:
         return str(n)

@@ -28,6 +28,9 @@ RED     = "\033[31m"
 BOLD    = "\033[1m"
 INVERSE = "\033[7m"
 
+TTL_RATIO = 0.8
+TTL_MIN_PREV = 5000
+
 
 def color_for_pct(pct):
     if pct >= 80:
@@ -165,10 +168,10 @@ def read_last_cc(transcript_path):
 
 
 def is_ttl_refresh(cc, prev_cache_read):
-    """Heuristic: cc > 80% of prev cache_read AND prev > 5000."""
-    if prev_cache_read <= 5000:
+    """Heuristic: cc > TTL_RATIO of prev cache_read AND prev > TTL_MIN_PREV."""
+    if prev_cache_read <= TTL_MIN_PREV:
         return False
-    return (cc / prev_cache_read) > 0.8
+    return (cc / prev_cache_read) > TTL_RATIO
 
 
 def render_cc_segment(cc, is_first_turn, is_ttl=False):
