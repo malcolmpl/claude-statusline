@@ -1,0 +1,3 @@
+{"type":"user","message":{"content":"x"}}
+{"type":"assistant","message":{"usage":{"cache_creation_input_tokens":3000,"cache_read_input_tokens":0}}}
+{"type":"assistant","message":{"usage":{"cache_crea

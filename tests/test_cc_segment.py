@@ -83,5 +83,17 @@ class TestRenderCc(unittest.TestCase):
         self.assertNotIn("‼", s)
 
 
+class TestEdgeCases(unittest.TestCase):
+    def test_high_cc(self):
+        r = statusline.read_last_cc(os.path.join(FIX, "transcript_high.jsonl"))
+        self.assertEqual(r["cc"], 74000)
+        self.assertFalse(r["is_first_turn"])
+
+    def test_corrupted_tail_skipped(self):
+        r = statusline.read_last_cc(os.path.join(FIX, "transcript_corrupted.jsonl"))
+        self.assertTrue(r["found"])
+        self.assertEqual(r["cc"], 3000)
+
+
 if __name__ == "__main__":
     unittest.main()
