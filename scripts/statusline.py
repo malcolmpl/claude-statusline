@@ -5,6 +5,7 @@ import json
 import sys
 import os
 import subprocess
+from collections import deque
 
 # Force UTF-8 output on Windows
 if sys.platform == "win32":
@@ -103,6 +104,59 @@ def fmt_k(n):
     if n < 10000:
         return f"{n/1000:.1f}k"
     return f"{round(n/1000)}k"
+
+
+def read_last_cc(transcript_path):
+    """Return {'cc','is_first_turn','found'} from last assistant msg with cc>0.
+
+    is_first_turn: the matching message is the file's first assistant message.
+    Reads last 50 lines via deque; safe on partially-written JSONL.
+    """
+    result = {"cc": 0, "is_first_turn": False, "found": False}
+    if not transcript_path or not os.path.isfile(transcript_path):
+        return result
+
+    total_assistant = 0
+    try:
+        with open(transcript_path, encoding="utf-8", errors="replace") as f:
+            for ln in f:
+                if '"type":"assistant"' in ln or '"type": "assistant"' in ln:
+                    total_assistant += 1
+    except Exception:
+        return result
+
+    try:
+        with open(transcript_path, encoding="utf-8", errors="replace") as f:
+            tail = deque(f, maxlen=50)
+    except Exception:
+        return result
+
+    seen_assistant_from_end = 0
+    last_cc = 0
+    last_index = -1
+    for ln in reversed(tail):
+        ln = ln.strip()
+        if not ln:
+            continue
+        try:
+            obj = json.loads(ln)
+        except Exception:
+            continue
+        if obj.get("type") != "assistant":
+            continue
+        seen_assistant_from_end += 1
+        usage = (obj.get("message") or {}).get("usage") or {}
+        cc = usage.get("cache_creation_input_tokens", 0) or 0
+        if cc > 0:
+            last_cc = cc
+            last_index = total_assistant - seen_assistant_from_end
+            break
+
+    if last_cc > 0:
+        result["cc"] = last_cc
+        result["is_first_turn"] = (last_index == 0)
+        result["found"] = True
+    return result
 
 
 def fmt_duration(ms):

@@ -1,0 +1,6 @@
+{"type":"user","message":{"content":"hi"}}
+{"type":"assistant","message":{"usage":{"cache_creation_input_tokens":25000,"cache_read_input_tokens":0}}}
+{"type":"user","message":{"content":"ok"}}
+{"type":"assistant","message":{"usage":{"cache_creation_input_tokens":1200,"cache_read_input_tokens":25000}}}
+{"type":"user","message":{"content":"go"}}
+{"type":"assistant","message":{"usage":{"cache_creation_input_tokens":7400,"cache_read_input_tokens":26200}}}
