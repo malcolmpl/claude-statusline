@@ -95,5 +95,24 @@ class TestEdgeCases(unittest.TestCase):
         self.assertEqual(r["cc"], 3000)
 
 
+class TestPrevCacheRead(unittest.TestCase):
+    def test_normal_returns_prev_cache_read(self):
+        r = statusline.read_last_cc(os.path.join(FIX, "transcript_normal.jsonl"))
+        self.assertEqual(r["prev_cache_read"], 25000)
+
+    def test_ttl_fixture_prev(self):
+        r = statusline.read_last_cc(os.path.join(FIX, "transcript_ttl.jsonl"))
+        self.assertEqual(r["cc"], 29000)
+        self.assertEqual(r["prev_cache_read"], 25000)
+
+    def test_init_only_no_prev(self):
+        r = statusline.read_last_cc(os.path.join(FIX, "transcript_init.jsonl"))
+        self.assertEqual(r["prev_cache_read"], 0)
+
+    def test_missing_file_prev_zero(self):
+        r = statusline.read_last_cc(None)
+        self.assertEqual(r["prev_cache_read"], 0)
+
+
 if __name__ == "__main__":
     unittest.main()

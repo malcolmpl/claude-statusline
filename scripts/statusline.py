@@ -116,7 +116,7 @@ def read_last_cc(transcript_path):
     is_first_turn: the matching message is the file's first assistant message.
     Reads last 50 lines via deque; safe on partially-written JSONL.
     """
-    result = {"cc": 0, "is_first_turn": False, "found": False}
+    result = {"cc": 0, "is_first_turn": False, "found": False, "prev_cache_read": 0}
     if not transcript_path or not os.path.isfile(transcript_path):
         return result
 
@@ -134,6 +134,7 @@ def read_last_cc(transcript_path):
     seen_assistant_from_end = 0
     last_cc = 0
     last_index = -1
+    matched = False
     for ln in reversed(tail):
         ln = ln.strip()
         if not ln:
@@ -146,10 +147,14 @@ def read_last_cc(transcript_path):
             continue
         seen_assistant_from_end += 1
         usage = (obj.get("message") or {}).get("usage") or {}
-        cc = usage.get("cache_creation_input_tokens", 0) or 0
-        if cc > 0:
-            last_cc = cc
-            last_index = total_assistant - seen_assistant_from_end
+        if not matched:
+            cc = usage.get("cache_creation_input_tokens", 0) or 0
+            if cc > 0:
+                last_cc = cc
+                last_index = total_assistant - seen_assistant_from_end
+                matched = True
+        else:
+            result["prev_cache_read"] = usage.get("cache_read_input_tokens", 0) or 0
             break
 
     if last_cc > 0:
