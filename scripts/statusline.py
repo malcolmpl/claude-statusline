@@ -159,6 +159,20 @@ def read_last_cc(transcript_path):
     return result
 
 
+def render_cc_segment(cc, is_first_turn):
+    """Render colored 'cc:Nk' segment. Caller must guard cc>0."""
+    label = fmt_k(cc)
+    if is_first_turn:
+        return f"\033[33mcc:{label} (init){RESET}"
+    if cc < 2000:
+        return f"{DIM}cc:{label}{RESET}"
+    if cc < 10000:
+        return f"\033[33mcc:{label}{RESET}"
+    if cc < 30000:
+        return f"\033[31m\033[1mcc:{label} ⚠{RESET}"
+    return f"\033[31m\033[7mcc:{label} ‼{RESET}"
+
+
 def fmt_duration(ms):
     """Format milliseconds as Xm Xs."""
     total_s = int(ms) // 1000

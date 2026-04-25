@@ -48,5 +48,40 @@ class TestReadLastCc(unittest.TestCase):
         self.assertFalse(r["found"])
 
 
+class TestRenderCc(unittest.TestCase):
+    def test_small_gray(self):
+        s = statusline.render_cc_segment(500, False)
+        self.assertIn("cc:500", s)
+        self.assertIn("\033[2m", s)
+
+    def test_mid_yellow(self):
+        s = statusline.render_cc_segment(7400, False)
+        self.assertIn("cc:7.4k", s)
+        self.assertIn("\033[33m", s)
+        self.assertNotIn("⚠", s)
+
+    def test_high_red_warn(self):
+        s = statusline.render_cc_segment(15000, False)
+        self.assertIn("cc:15k", s)
+        self.assertIn("\033[31m", s)
+        self.assertIn("\033[1m", s)
+        self.assertIn("⚠", s)
+
+    def test_panic_inverse(self):
+        s = statusline.render_cc_segment(74000, False)
+        self.assertIn("cc:74k", s)
+        self.assertIn("\033[31m", s)
+        self.assertIn("\033[7m", s)
+        self.assertIn("‼", s)
+
+    def test_init_forces_yellow(self):
+        s = statusline.render_cc_segment(27000, True)
+        self.assertIn("cc:27k", s)
+        self.assertIn("(init)", s)
+        self.assertIn("\033[33m", s)
+        self.assertNotIn("⚠", s)
+        self.assertNotIn("‼", s)
+
+
 if __name__ == "__main__":
     unittest.main()
