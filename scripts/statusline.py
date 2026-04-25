@@ -225,6 +225,10 @@ def main():
     duration_ms = (data.get("cost") or {}).get("total_duration_ms", 0) or 0
     session_time = fmt_duration(duration_ms)
 
+    transcript_path = data.get("transcript_path")
+    cc_info = read_last_cc(transcript_path)
+    cc_segment = render_cc_segment(cc_info["cc"], cc_info["is_first_turn"]) if cc_info["found"] else None
+
     # Claude usage limits — prefer stdin rate_limits, fallback to check-usage.js
     rl = data.get("rate_limits") or {}
     usage_parts = []
@@ -262,6 +266,8 @@ def main():
         f"{col}{fmt_tokens(total_tokens)} / {fmt_tokens(window_size)}{RESET}",
         f"{DIM}{session_time}{RESET}",
     ]
+    if cc_segment:
+        parts.append(cc_segment)
     parts += usage_parts
 
     print(sep.join(parts))
