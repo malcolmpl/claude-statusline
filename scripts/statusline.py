@@ -96,6 +96,15 @@ def fmt_tokens(n):
     return f"{n:,}"
 
 
+def fmt_k(n):
+    """Compact: '500', '1.2k', '74k'."""
+    if n < 1000:
+        return str(n)
+    if n < 10000:
+        return f"{n/1000:.1f}k"
+    return f"{round(n/1000)}k"
+
+
 def fmt_duration(ms):
     """Format milliseconds as Xm Xs."""
     total_s = int(ms) // 1000
