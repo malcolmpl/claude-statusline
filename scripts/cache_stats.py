@@ -155,9 +155,33 @@ def render(analysis, summary):
     return "\n".join(lines)
 
 
+def _cwd_slug():
+    """Convert current cwd to ~/.claude/projects slug format.
+
+    Windows 'H:\\Projects\\foo' -> 'H--Projects-foo'.
+    POSIX '/home/u/proj' -> '-home-u-proj'.
+    """
+    cwd = os.getcwd()
+    s = cwd.replace("\\", "/").replace("/", "-").replace(":", "-")
+    return s.lstrip("-") or s
+
+
 def _find_latest_transcript():
-    """Stub; implemented in next task."""
-    return None
+    """Newest *.jsonl in ~/.claude/projects/<cwd-slug>/, or None."""
+    home = os.environ.get("USERPROFILE") or os.environ.get("HOME")
+    if not home:
+        return None
+    proj_dir = os.path.join(home, ".claude", "projects", _cwd_slug())
+    if not os.path.isdir(proj_dir):
+        return None
+    candidates = [
+        os.path.join(proj_dir, f)
+        for f in os.listdir(proj_dir)
+        if f.endswith(".jsonl")
+    ]
+    if not candidates:
+        return None
+    return max(candidates, key=os.path.getmtime)
 
 
 if __name__ == "__main__":

@@ -66,3 +66,47 @@ class TestRender(unittest.TestCase):
         s = cache_stats.summarize(r)
         out = cache_stats.render(r, s)
         self.assertIn("init", out)
+
+
+class TestFindLatest(unittest.TestCase):
+    def setUp(self):
+        self._saved_home = os.environ.get("HOME")
+        self._saved_userprofile = os.environ.get("USERPROFILE")
+
+    def tearDown(self):
+        for k, v in (("HOME", self._saved_home), ("USERPROFILE", self._saved_userprofile)):
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+
+    def test_returns_none_when_no_dir(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            os.environ["USERPROFILE"] = tmp
+            os.environ["HOME"] = tmp
+            self.assertIsNone(cache_stats._find_latest_transcript())
+
+    def test_picks_newest(self):
+        import tempfile, time
+        with tempfile.TemporaryDirectory() as tmp:
+            os.environ["USERPROFILE"] = tmp
+            os.environ["HOME"] = tmp
+            slug = cache_stats._cwd_slug()
+            d = os.path.join(tmp, ".claude", "projects", slug)
+            os.makedirs(d)
+            old = os.path.join(d, "old.jsonl")
+            new = os.path.join(d, "new.jsonl")
+            with open(old, "w") as f:
+                f.write("{}\n")
+            time.sleep(0.05)
+            with open(new, "w") as f:
+                f.write("{}\n")
+            self.assertEqual(cache_stats._find_latest_transcript(), new)
+
+    def test_cwd_slug_format(self):
+        s = cache_stats._cwd_slug()
+        self.assertTrue(len(s) > 0)
+        self.assertNotIn("\\", s)
+        self.assertNotIn("/", s)
+        self.assertNotIn(":", s)
