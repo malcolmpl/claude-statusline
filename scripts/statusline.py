@@ -241,7 +241,10 @@ def main():
 
     transcript_path = data.get("transcript_path")
     cc_info = read_last_cc(transcript_path)
-    cc_segment = render_cc_segment(cc_info["cc"], cc_info["is_first_turn"]) if cc_info["found"] else None
+    cc_segment = None
+    if cc_info["found"]:
+        is_ttl = is_ttl_refresh(cc_info["cc"], cc_info["prev_cache_read"])
+        cc_segment = render_cc_segment(cc_info["cc"], cc_info["is_first_turn"], is_ttl=is_ttl)
 
     # Claude usage limits — prefer stdin rate_limits, fallback to check-usage.js
     rl = data.get("rate_limits") or {}
