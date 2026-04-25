@@ -24,3 +24,23 @@ class TestAnalyze(unittest.TestCase):
     def test_none_path(self):
         r = cache_stats.analyze(None)
         self.assertEqual(r["turns"], [])
+
+
+class TestSummary(unittest.TestCase):
+    def test_ttl_classified(self):
+        r = cache_stats.analyze(os.path.join(FIX, "transcript_ttl.jsonl"))
+        s = cache_stats.summarize(r)
+        self.assertEqual(s["ttl_count"], 1)
+        self.assertEqual(s["init_total"], 25000)
+        self.assertEqual(s["ttl_total"], 29000)
+
+    def test_no_ttl_in_normal(self):
+        r = cache_stats.analyze(os.path.join(FIX, "transcript_normal.jsonl"))
+        s = cache_stats.summarize(r)
+        self.assertEqual(s["ttl_count"], 0)
+
+    def test_top3_spikes(self):
+        r = cache_stats.analyze(os.path.join(FIX, "transcript_normal.jsonl"))
+        s = cache_stats.summarize(r)
+        self.assertEqual(len(s["top_spikes"]), 3)
+        self.assertEqual(s["top_spikes"][0]["cc"], 25000)

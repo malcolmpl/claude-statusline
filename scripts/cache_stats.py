@@ -57,6 +57,51 @@ def _first_tool_name(content):
     return None
 
 
+TTL_RATIO = 0.8
+TTL_MIN_PREV = 5000
+
+
+def _classify_turn(turn, prev_cache_read):
+    """Return 'init' | 'ttl' | 'data_load' | 'normal'."""
+    cc = turn["cc"]
+    if turn["index"] == 0:
+        return "init"
+    if prev_cache_read > TTL_MIN_PREV and cc / prev_cache_read > TTL_RATIO:
+        return "ttl"
+    if cc >= 10000:
+        return "data_load"
+    return "normal"
+
+
+def summarize(analysis):
+    turns = analysis["turns"]
+    out = {
+        "init_total": 0,
+        "data_loads_total": 0,
+        "ttl_total": 0,
+        "normal_total": 0,
+        "ttl_count": 0,
+        "top_spikes": [],
+    }
+    prev_cr = 0
+    for t in turns:
+        kind = _classify_turn(t, prev_cr)
+        t["kind"] = kind
+        if kind == "init":
+            out["init_total"] += t["cc"]
+        elif kind == "ttl":
+            out["ttl_total"] += t["cc"]
+            out["ttl_count"] += 1
+        elif kind == "data_load":
+            out["data_loads_total"] += t["cc"]
+        else:
+            out["normal_total"] += t["cc"]
+        prev_cr = t["cache_read"]
+
+    out["top_spikes"] = sorted(turns, key=lambda t: t["cc"], reverse=True)[:3]
+    return out
+
+
 if __name__ == "__main__":
     path = sys.argv[1] if len(sys.argv) > 1 else None
     r = analyze(path)

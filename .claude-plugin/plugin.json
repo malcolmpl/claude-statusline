@@ -1,7 +1,7 @@
 {
   "name": "claude-statusline",
   "description": "Custom statusline with context usage bar, token count, session time, and Claude rate limit monitoring via claude-dashboard",
-  "version": "1.0.15",
+  "version": "1.0.16",
   "author": {
     "name": "Dariusz Mikulski"
   },
