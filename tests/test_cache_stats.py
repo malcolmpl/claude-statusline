@@ -44,3 +44,25 @@ class TestSummary(unittest.TestCase):
         s = cache_stats.summarize(r)
         self.assertEqual(len(s["top_spikes"]), 3)
         self.assertEqual(s["top_spikes"][0]["cc"], 25000)
+
+
+class TestRender(unittest.TestCase):
+    def test_render_contains_headers(self):
+        r = cache_stats.analyze(os.path.join(FIX, "transcript_ttl.jsonl"))
+        s = cache_stats.summarize(r)
+        out = cache_stats.render(r, s)
+        self.assertIn("Turn", out)
+        self.assertIn("cc", out)
+        self.assertIn("Summary", out)
+
+    def test_render_marks_ttl(self):
+        r = cache_stats.analyze(os.path.join(FIX, "transcript_ttl.jsonl"))
+        s = cache_stats.summarize(r)
+        out = cache_stats.render(r, s)
+        self.assertIn("TTL!", out)
+
+    def test_render_marks_init(self):
+        r = cache_stats.analyze(os.path.join(FIX, "transcript_ttl.jsonl"))
+        s = cache_stats.summarize(r)
+        out = cache_stats.render(r, s)
+        self.assertIn("init", out)

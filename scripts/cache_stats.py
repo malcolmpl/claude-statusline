@@ -6,6 +6,11 @@ import os
 import sys
 
 
+RED   = "\033[31m"
+DIM   = "\033[2m"
+RESET = "\033[0m"
+
+
 def analyze(transcript_path):
     """Return {turns: [...], total_cc: int}.
 
@@ -102,7 +107,64 @@ def summarize(analysis):
     return out
 
 
+def _fmt_k(n):
+    if n < 1000:
+        return str(n)
+    if n < 10000:
+        return f"{n/1000:.1f}k"
+    return f"{round(n/1000)}k"
+
+
+def _note_for(turn):
+    kind = turn.get("kind")
+    if kind == "init":
+        return "init"
+    if kind == "ttl":
+        return f"{RED}TTL!{RESET}"
+    if turn.get("tool_name"):
+        return turn["tool_name"]
+    return ""
+
+
+def render(analysis, summary):
+    lines = []
+    lines.append(f"Turns: {len(analysis['turns'])}  Total cc: {analysis['total_cc']:,}")
+    lines.append("")
+    lines.append(f"{'Turn':>4}  {'cc':>9}  {'cache_read':>10}  Note")
+    lines.append("-" * 50)
+
+    for t in analysis["turns"]:
+        cc_str = _fmt_k(t["cc"])
+        cr_str = _fmt_k(t["cache_read"])
+        note = _note_for(t)
+        lines.append(f"{t['index']+1:>4}  {cc_str:>9}  {cr_str:>10}  {note}")
+
+    lines.append("")
+    lines.append("Summary")
+    lines.append("-------")
+    total = analysis["total_cc"] or 1
+    lines.append(f"  init:        {summary['init_total']:>10,}  ({summary['init_total']*100/total:5.1f}%)")
+    lines.append(f"  data loads:  {summary['data_loads_total']:>10,}  ({summary['data_loads_total']*100/total:5.1f}%)")
+    lines.append(f"  TTL refresh: {summary['ttl_total']:>10,}  ({summary['ttl_total']*100/total:5.1f}%)  {summary['ttl_count']} events")
+    lines.append(f"  normal:      {summary['normal_total']:>10,}  ({summary['normal_total']*100/total:5.1f}%)")
+    lines.append("")
+    lines.append("Top spikes:")
+    for sp in summary["top_spikes"]:
+        note = _note_for(sp)
+        lines.append(f"  Turn {sp['index']+1}: {_fmt_k(sp['cc']):>7}  {note}")
+    return "\n".join(lines)
+
+
+def _find_latest_transcript():
+    """Stub; implemented in next task."""
+    return None
+
+
 if __name__ == "__main__":
-    path = sys.argv[1] if len(sys.argv) > 1 else None
-    r = analyze(path)
-    print(f"turns={len(r['turns'])} total_cc={r['total_cc']}")
+    path = sys.argv[1] if len(sys.argv) > 1 else _find_latest_transcript()
+    if not path:
+        print("No transcript path provided and no recent JSONL found.", file=sys.stderr)
+        sys.exit(1)
+    a = analyze(path)
+    s = summarize(a)
+    print(render(a, s))
