@@ -114,5 +114,37 @@ class TestPrevCacheRead(unittest.TestCase):
         self.assertEqual(r["prev_cache_read"], 0)
 
 
+class TestIsTtl(unittest.TestCase):
+    def test_ttl_match(self):
+        self.assertTrue(statusline.is_ttl_refresh(cc=29000, prev_cache_read=25000))
+
+    def test_below_ratio_not_ttl(self):
+        self.assertFalse(statusline.is_ttl_refresh(cc=10000, prev_cache_read=50000))
+
+    def test_low_prev_not_ttl(self):
+        self.assertFalse(statusline.is_ttl_refresh(cc=4500, prev_cache_read=4000))
+
+    def test_zero_prev_not_ttl(self):
+        self.assertFalse(statusline.is_ttl_refresh(cc=27000, prev_cache_read=0))
+
+
+class TestRenderCcTtl(unittest.TestCase):
+    def test_ttl_label_shown(self):
+        s = statusline.render_cc_segment(74000, is_first_turn=False, is_ttl=True)
+        self.assertIn("(TTL!)", s)
+        self.assertIn("\033[31m", s)
+        self.assertNotIn("⚠", s)
+        self.assertNotIn("‼", s)
+
+    def test_init_priority_over_ttl(self):
+        s = statusline.render_cc_segment(27000, is_first_turn=True, is_ttl=True)
+        self.assertIn("(init)", s)
+        self.assertNotIn("TTL", s)
+
+    def test_no_ttl_default(self):
+        s = statusline.render_cc_segment(7400, is_first_turn=False, is_ttl=False)
+        self.assertNotIn("TTL", s)
+
+
 if __name__ == "__main__":
     unittest.main()

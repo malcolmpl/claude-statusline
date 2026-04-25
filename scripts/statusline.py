@@ -164,11 +164,20 @@ def read_last_cc(transcript_path):
     return result
 
 
-def render_cc_segment(cc, is_first_turn):
+def is_ttl_refresh(cc, prev_cache_read):
+    """Heuristic: cc > 80% of prev cache_read AND prev > 5000."""
+    if prev_cache_read <= 5000:
+        return False
+    return (cc / prev_cache_read) > 0.8
+
+
+def render_cc_segment(cc, is_first_turn, is_ttl=False):
     """Render colored 'cc:Nk' segment. Caller must guard cc>0."""
     label = fmt_k(cc)
     if is_first_turn:
         return f"{YELLOW}cc:{label} (init){RESET}"
+    if is_ttl:
+        return f"{RED}{BOLD}cc:{label} (TTL!){RESET}"
     if cc < 2000:
         return f"{DIM}cc:{label}{RESET}"
     if cc < 10000:
