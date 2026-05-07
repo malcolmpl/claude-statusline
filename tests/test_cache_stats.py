@@ -1,8 +1,9 @@
-import sys, os, unittest
+import sys, os, subprocess, unittest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
 import cache_stats
 
 FIX = os.path.join(os.path.dirname(__file__), "fixtures")
+SCRIPT = os.path.join(os.path.dirname(__file__), "..", "scripts", "cache_stats.py")
 
 
 class TestAnalyze(unittest.TestCase):
@@ -68,45 +69,17 @@ class TestRender(unittest.TestCase):
         self.assertIn("init", out)
 
 
-class TestFindLatest(unittest.TestCase):
-    def setUp(self):
-        self._saved_home = os.environ.get("HOME")
-        self._saved_userprofile = os.environ.get("USERPROFILE")
+class TestCli(unittest.TestCase):
+    def test_missing_arg_exits_nonzero_with_usage(self):
+        r = subprocess.run([sys.executable, SCRIPT], capture_output=True, text=True)
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("usage", r.stderr.lower())
 
-    def tearDown(self):
-        for k, v in (("HOME", self._saved_home), ("USERPROFILE", self._saved_userprofile)):
-            if v is None:
-                os.environ.pop(k, None)
-            else:
-                os.environ[k] = v
+    def test_explicit_path_renders_to_stdout(self):
+        fixture = os.path.join(FIX, "transcript_normal.jsonl")
+        r = subprocess.run([sys.executable, SCRIPT, fixture], capture_output=True, text=True)
+        self.assertEqual(r.returncode, 0)
+        self.assertIn("Summary", r.stdout)
+        self.assertIn("Total cc", r.stdout)
 
-    def test_returns_none_when_no_dir(self):
-        import tempfile
-        with tempfile.TemporaryDirectory() as tmp:
-            os.environ["USERPROFILE"] = tmp
-            os.environ["HOME"] = tmp
-            self.assertIsNone(cache_stats._find_latest_transcript())
 
-    def test_picks_newest(self):
-        import tempfile, time
-        with tempfile.TemporaryDirectory() as tmp:
-            os.environ["USERPROFILE"] = tmp
-            os.environ["HOME"] = tmp
-            slug = cache_stats._cwd_slug()
-            d = os.path.join(tmp, ".claude", "projects", slug)
-            os.makedirs(d)
-            old = os.path.join(d, "old.jsonl")
-            new = os.path.join(d, "new.jsonl")
-            with open(old, "w") as f:
-                f.write("{}\n")
-            time.sleep(0.05)
-            with open(new, "w") as f:
-                f.write("{}\n")
-            self.assertEqual(cache_stats._find_latest_transcript(), new)
-
-    def test_cwd_slug_format(self):
-        s = cache_stats._cwd_slug()
-        self.assertTrue(len(s) > 0)
-        self.assertNotIn("\\", s)
-        self.assertNotIn("/", s)
-        self.assertNotIn(":", s)

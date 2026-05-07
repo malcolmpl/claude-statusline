@@ -1,4 +1,4 @@
-In all interactions and commit messages, be extremely concise and sacrifice grammar for the sake of concision.
+Architectural decisions: see [CONTEXT.md](./CONTEXT.md) for the ADR index.
 
 ## Release Notes Format
 
