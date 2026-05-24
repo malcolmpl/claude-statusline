@@ -74,11 +74,14 @@ class TestRenderCc(unittest.TestCase):
         self.assertIn("\033[7m", s)
         self.assertIn("‼", s)
 
-    def test_init_forces_yellow(self):
+    def test_first_turn_dim_no_label_no_icon(self):
         s = statusline.render_cc_segment(27000, True)
         self.assertIn("cc:27k", s)
-        self.assertIn("(init)", s)
-        self.assertIn("\033[33m", s)
+        self.assertNotIn("(init)", s)
+        self.assertNotIn("TTL", s)
+        self.assertIn("\033[2m", s)
+        self.assertNotIn("\033[33m", s)
+        self.assertNotIn("\033[31m", s)
         self.assertNotIn("⚠", s)
         self.assertNotIn("‼", s)
 
@@ -128,6 +131,49 @@ class TestIsTtl(unittest.TestCase):
         self.assertFalse(statusline.is_ttl_refresh(cc=27000, prev_cache_read=0))
 
 
+class TestFirstTurnWindow(unittest.TestCase):
+    def test_tool_result_keeps_first_turn(self):
+        r = statusline.read_last_cc(os.path.join(FIX, "transcript_first_turn_with_tools.jsonl"))
+        self.assertTrue(r["found"])
+        self.assertEqual(r["cc"], 18000)
+        self.assertTrue(r["is_first_turn"])
+
+    def test_clear_resets_window(self):
+        r = statusline.read_last_cc(os.path.join(FIX, "transcript_clear_resets.jsonl"))
+        self.assertTrue(r["found"])
+        self.assertEqual(r["cc"], 30000)
+        self.assertTrue(r["is_first_turn"])
+
+    def test_caveat_does_not_count_as_prompt(self):
+        r = statusline.read_last_cc(os.path.join(FIX, "transcript_caveat_first.jsonl"))
+        self.assertTrue(r["found"])
+        self.assertTrue(r["is_first_turn"])
+
+
+class TestIsRealPrompt(unittest.TestCase):
+    def test_plain_string_is_real(self):
+        self.assertTrue(statusline._is_real_prompt({"type": "user", "message": {"content": "hi"}}))
+
+    def test_caveat_not_real(self):
+        self.assertFalse(statusline._is_real_prompt(
+            {"type": "user", "message": {"content": "<local-command-caveat>foo"}}))
+
+    def test_command_name_not_real(self):
+        self.assertFalse(statusline._is_real_prompt(
+            {"type": "user", "message": {"content": "<command-name>/clear</command-name>"}}))
+
+    def test_system_reminder_not_real(self):
+        self.assertFalse(statusline._is_real_prompt(
+            {"type": "user", "message": {"content": "<system-reminder>x</system-reminder>"}}))
+
+    def test_tool_result_list_not_real(self):
+        self.assertFalse(statusline._is_real_prompt(
+            {"type": "user", "message": {"content": [{"type": "tool_result", "content": "x"}]}}))
+
+    def test_non_user_type_not_real(self):
+        self.assertFalse(statusline._is_real_prompt({"type": "assistant", "message": {}}))
+
+
 class TestRenderCcTtl(unittest.TestCase):
     def test_ttl_label_shown(self):
         s = statusline.render_cc_segment(74000, is_first_turn=False, is_ttl=True)
@@ -136,10 +182,11 @@ class TestRenderCcTtl(unittest.TestCase):
         self.assertNotIn("⚠", s)
         self.assertNotIn("‼", s)
 
-    def test_init_priority_over_ttl(self):
+    def test_ttl_wins_in_first_turn(self):
         s = statusline.render_cc_segment(27000, is_first_turn=True, is_ttl=True)
-        self.assertIn("(init)", s)
-        self.assertNotIn("TTL", s)
+        self.assertIn("(TTL!)", s)
+        self.assertNotIn("(init)", s)
+        self.assertIn("\033[31m", s)
 
     def test_no_ttl_default(self):
         s = statusline.render_cc_segment(7400, is_first_turn=False, is_ttl=False)

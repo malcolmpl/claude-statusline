@@ -4,7 +4,7 @@
 import json
 import os
 import sys
-from statusline import TTL_RATIO, TTL_MIN_PREV
+from statusline import TTL_RATIO, TTL_MIN_PREV, _is_real_prompt, _is_window_reset
 
 
 RED   = "\033[31m"
@@ -22,6 +22,7 @@ def analyze(transcript_path):
         return result
 
     idx = 0
+    window_prompt_count = 0
     try:
         with open(transcript_path, encoding="utf-8", errors="replace") as f:
             for ln in f:
@@ -31,6 +32,12 @@ def analyze(transcript_path):
                 try:
                     obj = json.loads(ln)
                 except (json.JSONDecodeError, ValueError):
+                    continue
+                if _is_window_reset(obj):
+                    window_prompt_count = 0
+                    continue
+                if _is_real_prompt(obj):
+                    window_prompt_count += 1
                     continue
                 if obj.get("type") != "assistant":
                     continue
@@ -42,6 +49,7 @@ def analyze(transcript_path):
                 ts = obj.get("timestamp")
                 result["turns"].append({
                     "index": idx,
+                    "window_prompt_pos": window_prompt_count,
                     "cc": cc,
                     "cache_read": cr,
                     "tool_name": tool_name,
@@ -64,9 +72,12 @@ def _first_tool_name(content):
 
 
 def _classify_turn(turn, prev_cache_read):
-    """Return 'init' | 'ttl' | 'data_load' | 'normal'."""
+    """Return 'init' | 'ttl' | 'data_load' | 'normal'.
+
+    'init' wins over 'ttl' inside the first turn of a session window — see ADR-0004.
+    """
     cc = turn["cc"]
-    if turn["index"] == 0:
+    if turn.get("window_prompt_pos") == 1:
         return "init"
     if prev_cache_read > TTL_MIN_PREV and cc / prev_cache_read > TTL_RATIO:
         return "ttl"

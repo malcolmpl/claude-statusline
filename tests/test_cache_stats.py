@@ -69,6 +69,22 @@ class TestRender(unittest.TestCase):
         self.assertIn("init", out)
 
 
+class TestInitWindow(unittest.TestCase):
+    def test_all_assistants_of_first_turn_are_init(self):
+        r = cache_stats.analyze(os.path.join(FIX, "transcript_first_turn_with_tools.jsonl"))
+        s = cache_stats.summarize(r)
+        kinds = [t["kind"] for t in r["turns"]]
+        self.assertEqual(kinds, ["init", "init"])
+        self.assertEqual(s["init_total"], 25000 + 18000)
+
+    def test_clear_resets_init_window(self):
+        r = cache_stats.analyze(os.path.join(FIX, "transcript_clear_resets.jsonl"))
+        s = cache_stats.summarize(r)
+        kinds = [t["kind"] for t in r["turns"]]
+        self.assertEqual(kinds, ["init", "normal", "init"])
+        self.assertEqual(s["init_total"], 25000 + 30000)
+
+
 class TestCli(unittest.TestCase):
     def test_missing_arg_exits_nonzero_with_usage(self):
         r = subprocess.run([sys.executable, SCRIPT], capture_output=True, text=True)

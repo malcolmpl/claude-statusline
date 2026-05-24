@@ -1,0 +1,7 @@
+{"type":"user","message":{"content":"first"}}
+{"type":"assistant","message":{"usage":{"cache_creation_input_tokens":25000,"cache_read_input_tokens":0}}}
+{"type":"user","message":{"content":"second"}}
+{"type":"assistant","message":{"usage":{"cache_creation_input_tokens":1500,"cache_read_input_tokens":25000}}}
+{"type":"user","message":{"content":"<command-name>/clear</command-name>"}}
+{"type":"user","message":{"content":"after clear"}}
+{"type":"assistant","message":{"usage":{"cache_creation_input_tokens":30000,"cache_read_input_tokens":0}}}

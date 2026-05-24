@@ -1,0 +1,4 @@
+{"type":"user","message":{"content":"do stuff"}}
+{"type":"assistant","message":{"usage":{"cache_creation_input_tokens":25000,"cache_read_input_tokens":0}}}
+{"type":"user","message":{"content":[{"type":"tool_result","content":"out"}]}}
+{"type":"assistant","message":{"usage":{"cache_creation_input_tokens":18000,"cache_read_input_tokens":25000}}}

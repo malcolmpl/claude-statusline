@@ -5,7 +5,6 @@ import json
 import sys
 import os
 import subprocess
-from collections import deque
 
 # Force UTF-8 output on Windows
 if sys.platform == "win32":
@@ -113,56 +112,85 @@ def fmt_k(n):
     return f"{round(n/1000)}k"
 
 
-def read_last_cc(transcript_path):
-    """Return {'cc','is_first_turn','found'} from last assistant msg with cc>0.
+_NON_PROMPT_PREFIXES = ("<local-command-caveat>", "<command-name>", "<system-reminder>")
 
-    is_first_turn: the matching message is the file's first assistant message.
-    Reads last 50 lines via deque; safe on partially-written JSONL.
+
+def _is_real_prompt(obj):
+    """True if obj is a user message representing a real user prompt.
+
+    Excludes tool results, harness chatter (caveats, command names, system reminders),
+    and non-string content.
+    """
+    if obj.get("type") != "user":
+        return False
+    content = (obj.get("message") or {}).get("content")
+    if not isinstance(content, str):
+        return False
+    return not content.startswith(_NON_PROMPT_PREFIXES)
+
+
+def _is_window_reset(obj):
+    """True if obj is a /clear or /compact command — starts a new session window."""
+    if obj.get("type") != "user":
+        return False
+    content = (obj.get("message") or {}).get("content")
+    if not isinstance(content, str):
+        return False
+    if not content.startswith("<command-name>"):
+        return False
+    return "/clear" in content or "/compact" in content
+
+
+def read_last_cc(transcript_path):
+    """Return {'cc','is_first_turn','found','prev_cache_read'} from last assistant msg with cc>0.
+
+    is_first_turn: the matching message belongs to the first real prompt of the
+    current session window. A window starts at file beginning and resets on any
+    /clear or /compact slash command. See ADR-0004.
     """
     result = {"cc": 0, "is_first_turn": False, "found": False, "prev_cache_read": 0}
     if not transcript_path or not os.path.isfile(transcript_path):
         return result
 
-    total_assistant = 0
-    tail = deque(maxlen=50)
+    window_prompt_count = 0
+    last_cc = 0
+    last_cc_window_pos = -1
+    prev_cache_read = 0
+    pending_prev = 0
+
     try:
         with open(transcript_path, encoding="utf-8", errors="replace") as f:
             for ln in f:
-                if '"type":"assistant"' in ln or '"type": "assistant"' in ln:
-                    total_assistant += 1
-                tail.append(ln)
+                ln = ln.strip()
+                if not ln:
+                    continue
+                try:
+                    obj = json.loads(ln)
+                except (json.JSONDecodeError, ValueError):
+                    continue
+                if _is_window_reset(obj):
+                    window_prompt_count = 0
+                    continue
+                if _is_real_prompt(obj):
+                    window_prompt_count += 1
+                    continue
+                if obj.get("type") != "assistant":
+                    continue
+                usage = (obj.get("message") or {}).get("usage") or {}
+                cc = usage.get("cache_creation_input_tokens", 0) or 0
+                cr = usage.get("cache_read_input_tokens", 0) or 0
+                if cc > 0:
+                    prev_cache_read = pending_prev
+                    last_cc = cc
+                    last_cc_window_pos = window_prompt_count
+                pending_prev = cr
     except Exception:
         return result
 
-    seen_assistant_from_end = 0
-    last_cc = 0
-    last_index = -1
-    matched = False
-    for ln in reversed(tail):
-        ln = ln.strip()
-        if not ln:
-            continue
-        try:
-            obj = json.loads(ln)
-        except (json.JSONDecodeError, ValueError):
-            continue
-        if obj.get("type") != "assistant":
-            continue
-        seen_assistant_from_end += 1
-        usage = (obj.get("message") or {}).get("usage") or {}
-        if not matched:
-            cc = usage.get("cache_creation_input_tokens", 0) or 0
-            if cc > 0:
-                last_cc = cc
-                last_index = total_assistant - seen_assistant_from_end
-                matched = True
-        else:
-            result["prev_cache_read"] = usage.get("cache_read_input_tokens", 0) or 0
-            break
-
     if last_cc > 0:
         result["cc"] = last_cc
-        result["is_first_turn"] = (last_index == 0)
+        result["is_first_turn"] = (last_cc_window_pos == 1)
+        result["prev_cache_read"] = prev_cache_read
         result["found"] = True
     return result
 
@@ -177,10 +205,10 @@ def is_ttl_refresh(cc, prev_cache_read):
 def render_cc_segment(cc, is_first_turn, is_ttl=False):
     """Render colored 'cc:Nk' segment. Caller must guard cc>0."""
     label = fmt_k(cc)
-    if is_first_turn:
-        return f"{YELLOW}cc:{label} (init){RESET}"
     if is_ttl:
         return f"{RED}{BOLD}cc:{label} (TTL!){RESET}"
+    if is_first_turn:
+        return f"{DIM}cc:{label}{RESET}"
     if cc < 2000:
         return f"{DIM}cc:{label}{RESET}"
     if cc < 10000:
