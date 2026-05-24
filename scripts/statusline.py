@@ -6,6 +6,8 @@ import sys
 import os
 import subprocess
 
+from transcript import Kind, last_cc_turn, fmt_k
+
 # Force UTF-8 output on Windows
 if sys.platform == "win32":
     sys.stdout.reconfigure(encoding="utf-8")
@@ -27,9 +29,6 @@ RED     = "\033[31m"
 BOLD    = "\033[1m"
 INVERSE = "\033[7m"
 
-TTL_RATIO = 0.8
-TTL_MIN_PREV = 5000
-
 
 def color_for_pct(pct):
     if pct >= 80:
@@ -45,7 +44,7 @@ def color_for_pct(pct):
 def make_bar(pct, width=10):
     filled = int(pct / 100 * width)
     filled = max(0, min(width, filled))
-    return "\u25b0" * filled + "\u25b1" * (width - filled)
+    return "▰" * filled + "▱" * (width - filled)
 
 
 def get_git_branch(cwd):
@@ -103,112 +102,14 @@ def fmt_tokens(n):
     return f"{n:,}"
 
 
-def fmt_k(n):
-    """Compact: '500', '1.2k', '74k'."""
-    if n < 1000:
-        return str(n)
-    if n < 10000:
-        return f"{n/1000:.1f}k"
-    return f"{round(n/1000)}k"
-
-
-_NON_PROMPT_PREFIXES = ("<local-command-caveat>", "<command-name>", "<system-reminder>")
-
-
-def _is_real_prompt(obj):
-    """True if obj is a user message representing a real user prompt.
-
-    Excludes tool results, harness chatter (caveats, command names, system reminders),
-    and non-string content.
-    """
-    if obj.get("type") != "user":
-        return False
-    content = (obj.get("message") or {}).get("content")
-    if not isinstance(content, str):
-        return False
-    return not content.startswith(_NON_PROMPT_PREFIXES)
-
-
-def _is_window_reset(obj):
-    """True if obj is a /clear or /compact command — starts a new session window."""
-    if obj.get("type") != "user":
-        return False
-    content = (obj.get("message") or {}).get("content")
-    if not isinstance(content, str):
-        return False
-    if not content.startswith("<command-name>"):
-        return False
-    return "/clear" in content or "/compact" in content
-
-
-def read_last_cc(transcript_path):
-    """Return {'cc','is_first_turn','found','prev_cache_read'} from last assistant msg with cc>0.
-
-    is_first_turn: the matching message belongs to the first real prompt of the
-    current session window. A window starts at file beginning and resets on any
-    /clear or /compact slash command. See ADR-0004.
-    """
-    result = {"cc": 0, "is_first_turn": False, "found": False, "prev_cache_read": 0}
-    if not transcript_path or not os.path.isfile(transcript_path):
-        return result
-
-    window_prompt_count = 0
-    last_cc = 0
-    last_cc_window_pos = -1
-    prev_cache_read = 0
-    pending_prev = 0
-
-    try:
-        with open(transcript_path, encoding="utf-8", errors="replace") as f:
-            for ln in f:
-                ln = ln.strip()
-                if not ln:
-                    continue
-                try:
-                    obj = json.loads(ln)
-                except (json.JSONDecodeError, ValueError):
-                    continue
-                if _is_window_reset(obj):
-                    window_prompt_count = 0
-                    continue
-                if _is_real_prompt(obj):
-                    window_prompt_count += 1
-                    continue
-                if obj.get("type") != "assistant":
-                    continue
-                usage = (obj.get("message") or {}).get("usage") or {}
-                cc = usage.get("cache_creation_input_tokens", 0) or 0
-                cr = usage.get("cache_read_input_tokens", 0) or 0
-                if cc > 0:
-                    prev_cache_read = pending_prev
-                    last_cc = cc
-                    last_cc_window_pos = window_prompt_count
-                pending_prev = cr
-    except Exception:
-        return result
-
-    if last_cc > 0:
-        result["cc"] = last_cc
-        result["is_first_turn"] = (last_cc_window_pos == 1)
-        result["prev_cache_read"] = prev_cache_read
-        result["found"] = True
-    return result
-
-
-def is_ttl_refresh(cc, prev_cache_read):
-    """Heuristic: cc > TTL_RATIO of prev cache_read AND prev > TTL_MIN_PREV."""
-    if prev_cache_read <= TTL_MIN_PREV:
-        return False
-    return (cc / prev_cache_read) > TTL_RATIO
-
-
-def render_cc_segment(cc, is_first_turn, is_ttl=False):
+def render_cc_segment(cc, kind):
     """Render colored 'cc:Nk' segment. Caller must guard cc>0."""
     label = fmt_k(cc)
-    if is_ttl:
+    if kind == Kind.TTL_REFRESH:
         return f"{RED}{BOLD}cc:{label} (TTL!){RESET}"
-    if is_first_turn:
+    if kind == Kind.FIRST_TURN:
         return f"{DIM}cc:{label}{RESET}"
+    # DATA_LOAD or NORMAL — size-based palette
     if cc < 2000:
         return f"{DIM}cc:{label}{RESET}"
     if cc < 10000:
@@ -270,12 +171,8 @@ def main():
     duration_ms = (data.get("cost") or {}).get("total_duration_ms", 0) or 0
     session_time = fmt_duration(duration_ms)
 
-    transcript_path = data.get("transcript_path")
-    cc_info = read_last_cc(transcript_path)
-    cc_segment = None
-    if cc_info["found"]:
-        is_ttl = is_ttl_refresh(cc_info["cc"], cc_info["prev_cache_read"])
-        cc_segment = render_cc_segment(cc_info["cc"], cc_info["is_first_turn"], is_ttl=is_ttl)
+    last = last_cc_turn(data.get("transcript_path"))
+    cc_segment = render_cc_segment(last.cc, last.kind) if last else None
 
     # Claude usage limits — native rate_limits from Claude Code stdin
     rl = data.get("rate_limits") or {}

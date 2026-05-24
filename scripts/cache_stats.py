@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 """Per-turn cache_creation analysis for Claude Code session JSONL."""
 
-import json
-import os
 import sys
-from statusline import TTL_RATIO, TTL_MIN_PREV, _is_real_prompt, _is_window_reset
+
+from transcript import Kind, turns, fmt_k
 
 
 RED   = "\033[31m"
@@ -13,81 +12,12 @@ RESET = "\033[0m"
 
 
 def analyze(transcript_path):
-    """Return {turns: [...], total_cc: int}.
-
-    Each turn: {index, cc, cache_read, tool_name, timestamp}.
-    """
-    result = {"turns": [], "total_cc": 0}
-    if not transcript_path or not os.path.isfile(transcript_path):
-        return result
-
-    idx = 0
-    window_prompt_count = 0
-    try:
-        with open(transcript_path, encoding="utf-8", errors="replace") as f:
-            for ln in f:
-                ln = ln.strip()
-                if not ln:
-                    continue
-                try:
-                    obj = json.loads(ln)
-                except (json.JSONDecodeError, ValueError):
-                    continue
-                if _is_window_reset(obj):
-                    window_prompt_count = 0
-                    continue
-                if _is_real_prompt(obj):
-                    window_prompt_count += 1
-                    continue
-                if obj.get("type") != "assistant":
-                    continue
-                msg = obj.get("message") or {}
-                usage = msg.get("usage") or {}
-                cc = usage.get("cache_creation_input_tokens", 0) or 0
-                cr = usage.get("cache_read_input_tokens", 0) or 0
-                tool_name = _first_tool_name(msg.get("content"))
-                ts = obj.get("timestamp")
-                result["turns"].append({
-                    "index": idx,
-                    "window_prompt_pos": window_prompt_count,
-                    "cc": cc,
-                    "cache_read": cr,
-                    "tool_name": tool_name,
-                    "timestamp": ts,
-                })
-                result["total_cc"] += cc
-                idx += 1
-    except Exception:
-        return result
-    return result
-
-
-def _first_tool_name(content):
-    if not isinstance(content, list):
-        return None
-    for block in content:
-        if isinstance(block, dict) and block.get("type") == "tool_use":
-            return block.get("name")
-    return None
-
-
-def _classify_turn(turn, prev_cache_read):
-    """Return 'init' | 'ttl' | 'data_load' | 'normal'.
-
-    'init' wins over 'ttl' inside the first turn of a session window — see ADR-0004.
-    """
-    cc = turn["cc"]
-    if turn.get("window_prompt_pos") == 1:
-        return "init"
-    if prev_cache_read > TTL_MIN_PREV and cc / prev_cache_read > TTL_RATIO:
-        return "ttl"
-    if cc >= 10000:
-        return "data_load"
-    return "normal"
+    """Return {turns: [ClassifiedTurn...], total_cc: int}."""
+    ts = list(turns(transcript_path))
+    return {"turns": ts, "total_cc": sum(t.cc for t in ts)}
 
 
 def summarize(analysis):
-    turns = analysis["turns"]
     out = {
         "init_total": 0,
         "data_loads_total": 0,
@@ -96,42 +26,29 @@ def summarize(analysis):
         "ttl_count": 0,
         "top_spikes": [],
     }
-    prev_cr = 0
-    for t in turns:
-        kind = _classify_turn(t, prev_cr)
-        t["kind"] = kind
-        if kind == "init":
-            out["init_total"] += t["cc"]
-        elif kind == "ttl":
-            out["ttl_total"] += t["cc"]
+    for t in analysis["turns"]:
+        if t.kind == Kind.FIRST_TURN:
+            out["init_total"] += t.cc
+        elif t.kind == Kind.TTL_REFRESH:
+            out["ttl_total"] += t.cc
             out["ttl_count"] += 1
-        elif kind == "data_load":
-            out["data_loads_total"] += t["cc"]
+        elif t.kind == Kind.DATA_LOAD:
+            out["data_loads_total"] += t.cc
         else:
-            out["normal_total"] += t["cc"]
-        prev_cr = t["cache_read"]
-
-    out["top_spikes"] = sorted(turns, key=lambda t: t["cc"], reverse=True)[:3]
+            out["normal_total"] += t.cc
+    out["top_spikes"] = sorted(
+        enumerate(analysis["turns"]), key=lambda it: it[1].cc, reverse=True
+    )[:3]
     return out
 
 
-# keep in sync with statusline.fmt_k
-def _fmt_k(n):
-    if n < 1000:
-        return str(n)
-    if n < 10000:
-        return f"{n/1000:.1f}k"
-    return f"{round(n/1000)}k"
-
-
 def _note_for(turn):
-    kind = turn.get("kind")
-    if kind == "init":
+    if turn.kind == Kind.FIRST_TURN:
         return "init"
-    if kind == "ttl":
+    if turn.kind == Kind.TTL_REFRESH:
         return f"{RED}TTL!{RESET}"
-    if turn.get("tool_name"):
-        return turn["tool_name"]
+    if turn.tool_name:
+        return turn.tool_name
     return ""
 
 
@@ -142,11 +59,8 @@ def render(analysis, summary):
     lines.append(f"{'Turn':>4}  {'cc':>9}  {'cache_read':>10}  Note")
     lines.append("-" * 50)
 
-    for t in analysis["turns"]:
-        cc_str = _fmt_k(t["cc"])
-        cr_str = _fmt_k(t["cache_read"])
-        note = _note_for(t)
-        lines.append(f"{t['index']+1:>4}  {cc_str:>9}  {cr_str:>10}  {note}")
+    for i, t in enumerate(analysis["turns"]):
+        lines.append(f"{i+1:>4}  {fmt_k(t.cc):>9}  {fmt_k(t.cache_read):>10}  {_note_for(t)}")
 
     lines.append("")
     lines.append("Summary")
@@ -158,9 +72,8 @@ def render(analysis, summary):
     lines.append(f"  normal:      {summary['normal_total']:>10,}  ({summary['normal_total']*100/total:5.1f}%)")
     lines.append("")
     lines.append("Top spikes:")
-    for sp in summary["top_spikes"]:
-        note = _note_for(sp)
-        lines.append(f"  Turn {sp['index']+1}: {_fmt_k(sp['cc']):>7}  {note}")
+    for idx, sp in summary["top_spikes"]:
+        lines.append(f"  Turn {idx+1}: {fmt_k(sp.cc):>7}  {_note_for(sp)}")
     return "\n".join(lines)
 
 

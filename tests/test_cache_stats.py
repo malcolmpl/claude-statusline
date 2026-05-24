@@ -1,6 +1,7 @@
 import sys, os, subprocess, unittest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
 import cache_stats
+from transcript import Kind
 
 FIX = os.path.join(os.path.dirname(__file__), "fixtures")
 SCRIPT = os.path.join(os.path.dirname(__file__), "..", "scripts", "cache_stats.py")
@@ -10,9 +11,9 @@ class TestAnalyze(unittest.TestCase):
     def test_normal_turns(self):
         r = cache_stats.analyze(os.path.join(FIX, "transcript_normal.jsonl"))
         self.assertEqual(len(r["turns"]), 3)
-        self.assertEqual(r["turns"][0]["cc"], 25000)
-        self.assertEqual(r["turns"][0]["cache_read"], 0)
-        self.assertEqual(r["turns"][2]["cc"], 7400)
+        self.assertEqual(r["turns"][0].cc, 25000)
+        self.assertEqual(r["turns"][0].cache_read, 0)
+        self.assertEqual(r["turns"][2].cc, 7400)
 
     def test_total_cc(self):
         r = cache_stats.analyze(os.path.join(FIX, "transcript_normal.jsonl"))
@@ -44,7 +45,9 @@ class TestSummary(unittest.TestCase):
         r = cache_stats.analyze(os.path.join(FIX, "transcript_normal.jsonl"))
         s = cache_stats.summarize(r)
         self.assertEqual(len(s["top_spikes"]), 3)
-        self.assertEqual(s["top_spikes"][0]["cc"], 25000)
+        idx, top = s["top_spikes"][0]
+        self.assertEqual(top.cc, 25000)
+        self.assertEqual(idx, 0)
 
 
 class TestRender(unittest.TestCase):
@@ -73,16 +76,19 @@ class TestInitWindow(unittest.TestCase):
     def test_all_assistants_of_first_turn_are_init(self):
         r = cache_stats.analyze(os.path.join(FIX, "transcript_first_turn_with_tools.jsonl"))
         s = cache_stats.summarize(r)
-        kinds = [t["kind"] for t in r["turns"]]
-        self.assertEqual(kinds, ["init", "init"])
+        kinds = [t.kind for t in r["turns"]]
+        self.assertEqual(kinds, [Kind.FIRST_TURN, Kind.FIRST_TURN])
         self.assertEqual(s["init_total"], 25000 + 18000)
 
     def test_clear_resets_init_window(self):
+        # Turn 3 is first-turn-after-/clear AND TTL-eligible (cc=30k vs prev_cr=25k).
+        # Per ADR-0004 TTL wins.
         r = cache_stats.analyze(os.path.join(FIX, "transcript_clear_resets.jsonl"))
         s = cache_stats.summarize(r)
-        kinds = [t["kind"] for t in r["turns"]]
-        self.assertEqual(kinds, ["init", "normal", "init"])
-        self.assertEqual(s["init_total"], 25000 + 30000)
+        kinds = [t.kind for t in r["turns"]]
+        self.assertEqual(kinds, [Kind.FIRST_TURN, Kind.NORMAL, Kind.TTL_REFRESH])
+        self.assertEqual(s["init_total"], 25000)
+        self.assertEqual(s["ttl_total"], 30000)
 
 
 class TestCli(unittest.TestCase):
@@ -97,5 +103,3 @@ class TestCli(unittest.TestCase):
         self.assertEqual(r.returncode, 0)
         self.assertIn("Summary", r.stdout)
         self.assertIn("Total cc", r.stdout)
-
-
