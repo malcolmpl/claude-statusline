@@ -1,6 +1,6 @@
 # TTL Refresh detection heuristic
 
-A [[Turn]] is classified as a **TTL Refresh** when `cc > 80% * prev_cache_read` AND `prev_cache_read >= 5k`. The Anthropic API doesn't report cache expiry directly, so we infer it from token-usage shape: a turn that re-creates most of what was just being read implies the 5-minute prompt-cache TTL expired between turns.
+A [[Turn]] is classified as a **TTL Refresh** when `cc > 80% * prev_cache_read` AND `prev_cache_read > 5k`. The Anthropic API doesn't report cache expiry directly, so we infer it from token-usage shape: a turn that re-creates most of what was just being read implies the 5-minute prompt-cache TTL expired between turns.
 
 ## Why these thresholds
 
