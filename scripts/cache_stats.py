@@ -4,11 +4,7 @@
 import sys
 
 from transcript import Kind, turns, fmt_k
-
-
-RED   = "\033[31m"
-DIM   = "\033[2m"
-RESET = "\033[0m"
+from render import RED, DIM, RESET
 
 
 def analyze(transcript_path):

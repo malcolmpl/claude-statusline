@@ -3,10 +3,10 @@
 
 import json
 import sys
-import os
 import subprocess
 
-from transcript import Kind, last_cc_turn, fmt_k
+from transcript import last_cc_turn
+from render import DIM, RESET, render_gauge, render_cc_segment
 
 # Force UTF-8 output on Windows
 if sys.platform == "win32":
@@ -19,32 +19,6 @@ if sys.platform == "win32":
     _si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
     _si.wShowWindow = 0  # SW_HIDE
     _SUBPROCESS_KWARGS["startupinfo"] = _si
-
-
-RESET   = "\033[0m"
-DIM     = "\033[2m"
-BLINK   = "\033[5m"
-YELLOW  = "\033[33m"
-RED     = "\033[31m"
-BOLD    = "\033[1m"
-INVERSE = "\033[7m"
-
-
-def color_for_pct(pct):
-    if pct >= 80:
-        return "\033[31m"        # Red (blinking applied separately)
-    elif pct >= 70:
-        return "\033[38;5;208m"  # Orange
-    elif pct >= 60:
-        return "\033[33m"        # Yellow
-    else:
-        return "\033[32m"        # Green
-
-
-def make_bar(pct, width=10):
-    filled = int(pct / 100 * width)
-    filled = max(0, min(width, filled))
-    return "▰" * filled + "▱" * (width - filled)
 
 
 def get_git_branch(cwd):
@@ -66,7 +40,6 @@ def get_git_branch(cwd):
     except Exception:
         pass
     return None
-
 
 
 def fmt_resets_in(value):
@@ -100,23 +73,6 @@ def fmt_resets_in(value):
 def fmt_tokens(n):
     """Format token count with commas."""
     return f"{n:,}"
-
-
-def render_cc_segment(cc, kind):
-    """Render colored 'cc:Nk' segment. Caller must guard cc>0."""
-    label = fmt_k(cc)
-    if kind == Kind.TTL_REFRESH:
-        return f"{RED}{BOLD}cc:{label} (TTL!){RESET}"
-    if kind == Kind.FIRST_TURN:
-        return f"{DIM}cc:{label}{RESET}"
-    # DATA_LOAD or NORMAL — size-based palette
-    if cc < 2000:
-        return f"{DIM}cc:{label}{RESET}"
-    if cc < 10000:
-        return f"{YELLOW}cc:{label}{RESET}"
-    if cc < 30000:
-        return f"{RED}{BOLD}cc:{label} ⚠{RESET}"
-    return f"{RED}{INVERSE}cc:{label} ‼{RESET}"
 
 
 def fmt_duration(ms):
@@ -163,10 +119,6 @@ def main():
 
     used_pct = min(100.0, max(0.0, used_pct))
 
-    col = color_for_pct(used_pct)
-    bar = make_bar(used_pct)
-    blink_open = BLINK if used_pct >= 80 else ""
-
     # Session duration from cost.total_duration_ms
     duration_ms = (data.get("cost") or {}).get("total_duration_ms", 0) or 0
     session_time = fmt_duration(duration_ms)
@@ -184,16 +136,8 @@ def main():
         w_pct = round(sd.get("used_percentage", 0) or 0, 2)
         s_reset = fmt_resets_in(fh["resets_at"]) if fh.get("resets_at") else "?"
         w_reset = fmt_resets_in(sd["resets_at"]) if sd.get("resets_at") else "?"
-        s_col = color_for_pct(s_pct)
-        w_col = color_for_pct(w_pct)
-        s_bar = make_bar(s_pct)
-        w_bar = make_bar(w_pct)
-        usage_parts.append(
-            f"{s_col}session: {s_bar} {s_pct}% {DIM}resets {s_reset}{RESET}"
-        )
-        usage_parts.append(
-            f"{w_col}weekly: {w_bar} {w_pct}% {DIM}resets {w_reset}{RESET}"
-        )
+        usage_parts.append(render_gauge(s_pct, label="session", suffix=f"resets {s_reset}"))
+        usage_parts.append(render_gauge(w_pct, label="weekly",  suffix=f"resets {w_reset}"))
 
     # Assemble
     sep = f" {DIM}|{RESET} "
@@ -206,8 +150,7 @@ def main():
 
     parts += [
         f"{DIM}{model_name}{RESET}",
-        f"{blink_open}{col}{bar} {used_pct:.0f}%{RESET}",
-        f"{col}{fmt_tokens(total_tokens)} / {fmt_tokens(window_size)}{RESET}",
+        render_gauge(used_pct, tail=f"{fmt_tokens(total_tokens)} / {fmt_tokens(window_size)}"),
         f"{DIM}{session_time}{RESET}",
     ]
     if cc_segment:

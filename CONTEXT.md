@@ -11,6 +11,7 @@ Claude Code statusline plugin: a Python script Claude Code invokes each turn to 
 - **Init noise** — the large `cache_creation_input_tokens` value observed during a [[First turn]] because the cacheable prefix (system prompt, CLAUDE.md, tools schema) is being built. Not a signal of user behaviour; statusline dims it.
 - **TTL Refresh** — a turn classified by the heuristic in [ADR-0002](./docs/adr/0002-ttl-refresh-heuristic.md): `cc > 80% * prev_cache_read` AND `prev_cache_read > 5k`. Independent signal from [[Init noise]] — fires even inside [[First turn]].
 - **Data load** — a Turn where `cc ≥ 10_000` outside [[First turn]] / [[TTL Refresh]], typically driven by a large tool result (file Read, Grep dump) inflating the cache prefix. Diagnostic-only signal — statusline uses its size-based palette regardless of this classification; cache_stats tallies it separately.
+- **Gauge** — a rendered progress segment: bar (`▰▱`) + percentage, colored by a shared palette (green/yellow/orange/red), with blink applied when `pct ≥ BLINK_THRESHOLD` (80). Three adapters today: context-window gauge, session-limit gauge, weekly-limit gauge. The render rule (palette + bar + blink) lives in one place so the three adapters cannot drift.
 
 ## Architectural decisions
 
@@ -18,3 +19,4 @@ Claude Code statusline plugin: a Python script Claude Code invokes each turn to 
 - [ADR-0002](./docs/adr/0002-ttl-refresh-heuristic.md) — TTL Refresh detection heuristic
 - [ADR-0003](./docs/adr/0003-stdin-only-no-external-deps.md) — Statusline reads only from Claude Code stdin payload
 - [ADR-0004](./docs/adr/0004-first-turn-dim.md) — First-turn dim to suppress init noise
+- [ADR-0005](./docs/adr/0005-no-kind-style-table.md) — No Kind→style table in cc segment
