@@ -1,0 +1,3 @@
+{"type":"user","message":{"content":"do something"}}
+{"type":"assistant","message":{"id":"msg_AAA","content":[{"type":"thinking","thinking":"..."}],"usage":{"cache_creation_input_tokens":21733,"cache_read_input_tokens":22639}}}
+{"type":"assistant","message":{"id":"msg_AAA","content":[{"type":"tool_use","name":"Read","input":{}}],"usage":{"cache_creation_input_tokens":21733,"cache_read_input_tokens":22639}}}

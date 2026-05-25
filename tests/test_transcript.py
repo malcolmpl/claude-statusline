@@ -124,5 +124,27 @@ class TestFirstTurnWindow(unittest.TestCase):
         self.assertEqual(t.kind, Kind.FIRST_TURN)
 
 
+class TestDuplicateRecords(unittest.TestCase):
+    """Claude Code splits one assistant API call across multiple JSONL records
+    (one per content block), all sharing the same message.id and repeating the
+    same usage. The walker must count each Turn once."""
+
+    def test_one_turn_per_message_id(self):
+        ts = list(transcript.turns(os.path.join(FIX, "transcript_dup_records.jsonl")))
+        self.assertEqual(len(ts), 1)
+
+    def test_tool_name_from_last_record(self):
+        # Fixture has [thinking, tool_use:Read] under one msg.id. Emitting the
+        # first record would give tool_name=None; we want the tool_use block.
+        ts = list(transcript.turns(os.path.join(FIX, "transcript_dup_records.jsonl")))
+        self.assertEqual(ts[0].tool_name, "Read")
+
+    def test_no_false_ttl_from_duplicate_records(self):
+        # Without dedup, record 2 sees prev_cr=22639 from record 1 and trips
+        # the 0.8 ratio (21733/22639 = 0.96). Dedup must prevent that.
+        ts = list(transcript.turns(os.path.join(FIX, "transcript_dup_records.jsonl")))
+        self.assertNotEqual(ts[0].kind, Kind.TTL_REFRESH)
+
+
 if __name__ == "__main__":
     unittest.main()

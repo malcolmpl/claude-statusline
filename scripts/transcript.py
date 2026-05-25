@@ -77,11 +77,30 @@ def _classify(cc, prev_cache_read, window_prompt_pos):
 
 
 def turns(path) -> Iterator[ClassifiedTurn]:
-    """Yield every assistant Turn (including cc=0), already classified."""
+    """Yield every assistant Turn (including cc=0), already classified.
+
+    One Turn = one API call (one `message.id`). Claude Code splits a Turn
+    across multiple JSONL records (one per content block, all repeating the
+    same usage); we collapse them, keeping the last record so tool_name
+    reflects the final block (typically `tool_use`).
+    """
     if not path or not os.path.isfile(path):
         return
     window_prompt_pos = 0
     prev_cr = 0
+    pending = None  # (cc, cr, content, msg_id, pos, ts)
+
+    def build(rec):
+        cc, cr, content, _mid, pos, ts = rec
+        return ClassifiedTurn(
+            cc=cc,
+            cache_read=cr,
+            window_prompt_pos=pos,
+            tool_name=_first_tool_name(content),
+            timestamp=ts,
+            kind=_classify(cc, prev_cr, pos),
+        )
+
     try:
         with open(path, encoding="utf-8", errors="replace") as f:
             for ln in f:
@@ -92,27 +111,35 @@ def turns(path) -> Iterator[ClassifiedTurn]:
                     obj = json.loads(ln)
                 except (json.JSONDecodeError, ValueError):
                     continue
+
+                if obj.get("type") == "assistant":
+                    msg = obj.get("message") or {}
+                    mid = msg.get("id")
+                    usage = msg.get("usage") or {}
+                    cc = usage.get("cache_creation_input_tokens", 0) or 0
+                    cr = usage.get("cache_read_input_tokens", 0) or 0
+                    rec = (cc, cr, msg.get("content"), mid, window_prompt_pos, obj.get("timestamp"))
+                    if pending is not None and mid is not None and pending[3] == mid:
+                        pending = rec
+                    else:
+                        if pending is not None:
+                            yield build(pending)
+                            prev_cr = pending[1]
+                        pending = rec
+                    continue
+
+                if pending is not None:
+                    yield build(pending)
+                    prev_cr = pending[1]
+                    pending = None
+
                 if _is_window_reset(obj):
                     window_prompt_pos = 0
-                    continue
-                if _is_real_prompt(obj):
+                elif _is_real_prompt(obj):
                     window_prompt_pos += 1
-                    continue
-                if obj.get("type") != "assistant":
-                    continue
-                msg = obj.get("message") or {}
-                usage = msg.get("usage") or {}
-                cc = usage.get("cache_creation_input_tokens", 0) or 0
-                cr = usage.get("cache_read_input_tokens", 0) or 0
-                yield ClassifiedTurn(
-                    cc=cc,
-                    cache_read=cr,
-                    window_prompt_pos=window_prompt_pos,
-                    tool_name=_first_tool_name(msg.get("content")),
-                    timestamp=obj.get("timestamp"),
-                    kind=_classify(cc, prev_cr, window_prompt_pos),
-                )
-                prev_cr = cr
+
+            if pending is not None:
+                yield build(pending)
     except OSError:
         return
 

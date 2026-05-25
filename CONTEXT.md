@@ -4,7 +4,8 @@ Claude Code statusline plugin: a Python script Claude Code invokes each turn to 
 
 ## Glossary
 
-- **Turn** — a single assistant message in the transcript JSONL (`type:"assistant"`). One user prompt may produce many turns (tool-use cycles).
+- **Turn** — a single assistant API call, identified by `message.id`. Cache usage (`cache_creation_input_tokens`, `cache_read_input_tokens`) is reported per Turn. One user prompt may produce many Turns (tool-use cycles).
+- **Transcript record** — a single JSONL line with `type:"assistant"`. Claude Code splits one Turn across multiple records — one per content block (thinking, tool_use, text) — all sharing the same `message.id` and repeating the same `usage`. Heuristics walk Turns, not records: a single Turn must be counted once regardless of record count.
 - **Real prompt** — a `type:"user"` message whose `content` is a plain string and does NOT start with `<local-command-caveat>`, `<command-name>`, or `<system-reminder>`. Tool results (`content:list` with `tool_result`) and harness chatter are NOT real prompts.
 - **Session window** — the stretch of transcript between two cache-resetting events. A new window starts at file beginning and after any `<command-name>/clear` or `<command-name>/compact`.
 - **First turn** — every assistant turn belonging to the **first real prompt** of the current [[Session window]]. Cache creation here is dominated by system-prompt + CLAUDE.md load ("init noise"), not user-driven cost.
@@ -20,3 +21,4 @@ Claude Code statusline plugin: a Python script Claude Code invokes each turn to 
 - [ADR-0003](./docs/adr/0003-stdin-only-no-external-deps.md) — Statusline reads only from Claude Code stdin payload
 - [ADR-0004](./docs/adr/0004-first-turn-dim.md) — First-turn dim to suppress init noise
 - [ADR-0005](./docs/adr/0005-no-kind-style-table.md) — No Kind→style table in cc segment
+- [ADR-0006](./docs/adr/0006-turn-equals-message-id.md) — One Turn per `message.id`; collapse transcript records
