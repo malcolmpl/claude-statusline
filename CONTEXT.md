@@ -22,3 +22,4 @@ Claude Code statusline plugin: a Python script Claude Code invokes each turn to 
 - [ADR-0004](./docs/adr/0004-first-turn-dim.md) — First-turn dim to suppress init noise
 - [ADR-0005](./docs/adr/0005-no-kind-style-table.md) — No Kind→style table in cc segment
 - [ADR-0006](./docs/adr/0006-turn-equals-message-id.md) — One Turn per `message.id`; collapse transcript records
+- [ADR-0007](./docs/adr/0007-update-stable-install-path.md) — Install paths use the non-versioned marketplace clone, not the versioned cache

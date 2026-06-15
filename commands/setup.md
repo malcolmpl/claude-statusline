@@ -11,22 +11,24 @@ Follow these steps exactly in order.
 
 ## Step 1: Configure statusline command
 
-Determine this plugin's install path. The statusline script is at `scripts/statusline.py` relative to the plugin root.
+The statusline script is at `scripts/statusline.py` relative to the plugin root. Pick an **update-stable** path — do NOT point at the versioned cache dir (`~/.claude/plugins/cache/.../<VERSION>/...`): that version subdir is deleted on every plugin update, which silently breaks the statusline.
 
-Check these locations in order:
-1. `~/.claude/plugins/cache/claude-statusline-marketplace/claude-statusline/` (marketplace install — use latest version subdir)
-2. `~/.claude/plugins/cache/claude-statusline/claude-statusline/` (alt marketplace name)
-3. The repo working directory if running during local development
+Resolve the plugin root by **discovering** it (don't hardcode the dir name — it may derive from the marketplace git slug, not the `name` field):
 
-Build the full path to `scripts/statusline.py` using forward slashes.
+1. **Marketplace install (preferred, non-versioned, survives updates):** glob `~/.claude/plugins/marketplaces/*/` and pick the dir whose `.claude-plugin/marketplace.json` `name` is `claude-statusline-marketplace`, or that contains `scripts/statusline.py`. This is the marketplace git clone, kept current in place by Claude Code — its path never changes across updates.
+2. **Local development:** the repo working directory, if running from a local checkout.
+
+Resolve the chosen root to an **absolute** path (expand `~`/`$HOME`) and build `<root>/scripts/statusline.py` with forward slashes.
 
 Update `~/.claude/settings.json` `statusLine` to:
 ```json
 {
   "type": "command",
-  "command": "python3 <resolved-path>/scripts/statusline.py"
+  "command": "python3 <resolved-absolute-root>/scripts/statusline.py"
 }
 ```
+
+Then verify: pipe `{}` into the resolved command and confirm it prints a statusline and exits 0.
 
 ## Step 2: Enable git hooks (optional, local dev only)
 

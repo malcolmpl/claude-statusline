@@ -13,11 +13,10 @@ The analyzer is at `scripts/cache_stats.py` in this plugin. It now requires a tr
 
 ## Step 1: Resolve the script path
 
-The script lives alongside `scripts/statusline.py`. Determine this plugin's install path using the same resolution order as `setup.md`:
+The script lives alongside `scripts/statusline.py`. Determine this plugin's install path using the same **update-stable discovery** as `setup.md` Step 1 — do NOT use the versioned cache dir (`~/.claude/plugins/cache/.../<VERSION>/...`), which is deleted on update:
 
-1. `~/.claude/plugins/cache/claude-statusline-marketplace/claude-statusline/`
-2. `~/.claude/plugins/cache/claude-statusline/claude-statusline/`
-3. The repo working directory (local dev)
+1. **Marketplace install (preferred):** glob `~/.claude/plugins/marketplaces/*/` and pick the dir whose `.claude-plugin/marketplace.json` `name` is `claude-statusline-marketplace`, or that contains `scripts/cache_stats.py`. This is the non-versioned git clone, stable across updates.
+2. **Local development:** the repo working directory.
 
 ## Step 2: Resolve the transcript path
 
