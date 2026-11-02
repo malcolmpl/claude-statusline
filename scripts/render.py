@@ -1,4 +1,4 @@
-"""ANSI palette, percentage gauge, and cc-segment renderer.
+"""ANSI palette, percentage gauge, cc-segment renderer, and line assembly.
 
 Presentation primitives shared by statusline.py and cache_stats.py.
 Imports Kind from transcript (one-way: domain knows nothing about rendering).
@@ -61,3 +61,11 @@ def render_cc_segment(cc, kind):
     if cc < 30000:
         return f"{RED}{BOLD}cc:{label} ⚠{RESET}"
     return f"{RED}{INVERSE}cc:{label} ‼{RESET}"
+
+
+SEP = f" {DIM}|{RESET} "
+
+
+def assemble(location_parts, usage_parts):
+    """Join rendered segments into Location line + Usage line (see CONTEXT.md)."""
+    return f"{SEP.join(location_parts)}\n{SEP.join(usage_parts)}"

@@ -6,7 +6,7 @@ import sys
 import subprocess
 
 from transcript import last_cc_turn
-from render import DIM, RESET, render_gauge, render_cc_segment
+from render import DIM, RESET, assemble, render_gauge, render_cc_segment
 
 # Force UTF-8 output on Windows
 if sys.platform == "win32":
@@ -139,25 +139,22 @@ def main():
         usage_parts.append(render_gauge(s_pct, label="session", suffix=f"resets {s_reset}"))
         usage_parts.append(render_gauge(w_pct, label="weekly",  suffix=f"resets {w_reset}"))
 
-    # Assemble
-    sep = f" {DIM}|{RESET} "
-
-    parts = [
-        f"{DIM}{dir_display}{RESET}",
-    ]
+    # Location line
+    location = [f"{DIM}{dir_display}{RESET}"]
     if branch:
-        parts.append(f"{DIM}({branch}){RESET}")
+        location.append(f"{DIM}({branch}){RESET}")
+    location.append(f"{DIM}{model_name}{RESET}")
 
-    parts += [
-        f"{DIM}{model_name}{RESET}",
+    # Usage line
+    usage = [
         render_gauge(used_pct, tail=f"{fmt_tokens(total_tokens)} / {fmt_tokens(window_size)}"),
         f"{DIM}{session_time}{RESET}",
     ]
     if cc_segment:
-        parts.append(cc_segment)
-    parts += usage_parts
+        usage.append(cc_segment)
+    usage += usage_parts
 
-    print(sep.join(parts))
+    print(assemble(location, usage))
 
 
 if __name__ == "__main__":

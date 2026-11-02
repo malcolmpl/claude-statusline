@@ -58,13 +58,18 @@ Restart Claude Code after setup to see the statusline.
 ### What it shows
 
 ```
-/home/user/project | (master) | Claude Opus 4.7 | ▰▰▰▰▱▱▱▱▱▱ 40% | 80,000 / 200,000 | 12m30s | cc:1.2k | session: ▰▰▰▱▱▱▱▱▱▱ 25% resets 3h42m | weekly: ▰▰▰▰▰▰▱▱▱▱ 58% resets 4d12h
+/home/user/project | (master) | Claude Opus 4.7
+▰▰▰▰▱▱▱▱▱▱ 40% | 80,000 / 200,000 | 12m30s | cc:1.2k | session: ▰▰▰▱▱▱▱▱▱▱ 25% resets 3h42m | weekly: ▰▰▰▰▰▰▱▱▱▱ 58% resets 4d12h
 ```
 
-Segments separated by `|`:
+Two lines, segments separated by `|`.
+
+Line 1 — location:
 - Working directory
 - Git branch (if in a repo)
 - Model name
+
+Line 2 — usage:
 - Context usage bar + percentage
 - Token count (current / window size)
 - Session duration

@@ -55,5 +55,22 @@ class TestRenderCcTtl(unittest.TestCase):
         self.assertNotIn("TTL", s)
 
 
+
+class TestAssemble(unittest.TestCase):
+    def test_two_lines_location_then_usage(self):
+        out = render.assemble(["dir", "(main)", "Opus"], ["ctx", "1m", "session"])
+        lines = out.split("\n")
+        self.assertEqual(len(lines), 2)
+        self.assertIn("(main)", lines[0])
+        self.assertIn("Opus", lines[0])
+        self.assertTrue(lines[1].startswith("ctx"))
+        self.assertIn("session", lines[1])
+
+    def test_lines_joined_by_separator(self):
+        out = render.assemble(["a", "b"], ["c", "d"])
+        sep = f" {render.DIM}|{render.RESET} "
+        self.assertEqual(out, f"a{sep}b\nc{sep}d")
+
+
 if __name__ == "__main__":
     unittest.main()
