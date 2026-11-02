@@ -13,8 +13,17 @@ class TestGaugeTracer(unittest.TestCase):
 
 class TestGaugeLabel(unittest.TestCase):
     def test_label_prefix(self):
-        s = render.render_gauge(42, label="session")
-        self.assertIn("session: ", s)
+        s = render.render_gauge(42, label="5h")
+        self.assertIn("5h:", s)
+
+    def test_label_is_dim_not_colored(self):
+        # pct=50 → green. Label must be DIM, and color must start after it.
+        s = render.render_gauge(50, label="ctx")
+        self.assertTrue(s.startswith(f"{render.DIM}ctx:{render.RESET} "))
+
+    def test_label_does_not_blink(self):
+        s = render.render_gauge(92, label="7d")
+        self.assertLess(s.index("7d:"), s.index("[5m"))
 
     def test_no_label_no_colon(self):
         s = render.render_gauge(42)

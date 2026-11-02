@@ -58,13 +58,12 @@ class TestRenderCcTtl(unittest.TestCase):
 
 class TestAssemble(unittest.TestCase):
     def test_two_lines_location_then_usage(self):
-        out = render.assemble(["dir", "(main)", "Opus"], ["ctx", "1m", "session"])
+        out = render.assemble(["dir", "(main)"], ["Opus", "ctx", "1m", "5h"])
         lines = out.split("\n")
         self.assertEqual(len(lines), 2)
         self.assertIn("(main)", lines[0])
-        self.assertIn("Opus", lines[0])
-        self.assertTrue(lines[1].startswith("ctx"))
-        self.assertIn("session", lines[1])
+        self.assertTrue(lines[1].startswith("Opus"))
+        self.assertIn("5h", lines[1])
 
     def test_lines_joined_by_separator(self):
         out = render.assemble(["a", "b"], ["c", "d"])

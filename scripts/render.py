@@ -40,10 +40,10 @@ def render_gauge(pct, *, label=None, suffix=None, tail=None):
     col = _color_for_pct(pct)
     bar = _make_bar(pct)
     blink = BLINK if pct >= BLINK_THRESHOLD else ""
-    head = f"{label}: " if label else ""
+    head = f"{DIM}{label}:{RESET} " if label else ""
     tail_part = f" {col}{tail}{RESET}" if tail else ""
     suff_part = f" {DIM}{suffix}{RESET}" if suffix else ""
-    return f"{blink}{col}{head}{bar} {pct:.0f}%{RESET}{tail_part}{suff_part}"
+    return f"{head}{blink}{col}{bar} {pct:.0f}%{RESET}{tail_part}{suff_part}"
 
 
 def render_cc_segment(cc, kind):

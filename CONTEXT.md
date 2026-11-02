@@ -12,9 +12,9 @@ Claude Code statusline plugin: a Python script Claude Code invokes each turn to 
 - **Init noise** — the large `cache_creation_input_tokens` value observed during a [[First turn]] because the cacheable prefix (system prompt, CLAUDE.md, tools schema) is being built. Not a signal of user behaviour; statusline dims it.
 - **TTL Refresh** — a turn classified by the heuristic in [ADR-0002](./docs/adr/0002-ttl-refresh-heuristic.md): `cc > 80% * prev_cache_read` AND `prev_cache_read > 5k`. Independent signal from [[Init noise]] — fires even inside [[First turn]].
 - **Data load** — a Turn where `cc ≥ 10_000` outside [[First turn]] / [[TTL Refresh]], typically driven by a large tool result (file Read, Grep dump) inflating the cache prefix. Diagnostic-only signal — statusline uses its size-based palette regardless of this classification; cache_stats tallies it separately.
-- **Gauge** — a rendered progress segment: bar (`▰▱`) + percentage, colored by a shared palette (green/yellow/orange/red), with blink applied when `pct ≥ BLINK_THRESHOLD` (80). Three adapters today: context-window gauge, session-limit gauge, weekly-limit gauge. The render rule (palette + bar + blink) lives in one place so the three adapters cannot drift.
-- **Location line** — first statusline line: where the user is working — directory, git branch, model.
-- **Usage line** — second statusline line: what is being consumed — context-window [[Gauge]] with token count, session time, cc segment, session-limit and weekly-limit Gauges. Always present (context and time exist even without rate limits).
+- **Gauge** — a rendered progress segment: bar (`▰▱`) + percentage, colored by a shared palette (green/yellow/orange/red), with blink applied when `pct ≥ BLINK_THRESHOLD` (80). Three adapters today: **context gauge** (`ctx`), **5h-limit gauge** (`5h`), **7d-limit gauge** (`7d`). Avoid "session"/"weekly" for the limit gauges — "session" already names [[Session window]] and session time. The render rule (palette + bar + blink) lives in one place so the three adapters cannot drift.
+- **Location line** — first statusline line: where the user is working — directory, git branch.
+- **Usage line** — second statusline line: what is being consumed and by which model — model, context [[Gauge]] with token count, session time, cc segment, 5h-limit and 7d-limit Gauges. Always present (context and time exist even without rate limits).
 
 ## Architectural decisions
 

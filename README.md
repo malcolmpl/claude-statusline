@@ -58,8 +58,8 @@ Restart Claude Code after setup to see the statusline.
 ### What it shows
 
 ```
-/home/user/project | (master) | Claude Opus 4.7
-▰▰▰▰▱▱▱▱▱▱ 40% | 80,000 / 200,000 | 12m30s | cc:1.2k | session: ▰▰▰▱▱▱▱▱▱▱ 25% resets 3h42m | weekly: ▰▰▰▰▰▰▱▱▱▱ 58% resets 4d12h
+/home/user/project | (master)
+Claude Opus 4.7 | ctx: ▰▰▰▰▱▱▱▱▱▱ 40% 80,000 / 200,000 | 12m30s | cc:1.2k | 5h: ▰▰▰▱▱▱▱▱▱▱ 25% ↻3h42m | 7d: ▰▰▰▰▰▰▱▱▱▱ 58% ↻4d12h
 ```
 
 Two lines, segments separated by `|`.
@@ -67,15 +67,14 @@ Two lines, segments separated by `|`.
 Line 1 — location:
 - Working directory
 - Git branch (if in a repo)
-- Model name
 
 Line 2 — usage:
-- Context usage bar + percentage
-- Token count (current / window size)
+- Model name
+- `ctx:` context usage bar + percentage + token count (current / window size)
 - Session duration
 - `cc:` cache_creation tokens of the last turn (omitted on cold start)
-- Session rate limit (5h window) with reset timer
-- Weekly rate limit (7d window) with reset timer
+- `5h:` 5-hour rate limit with time until reset (`↻`)
+- `7d:` 7-day rate limit with time until reset (`↻`)
 
 Rate limit data comes from the `rate_limits` field in Claude Code's statusline stdin payload — no external dependencies, no caching layer.
 

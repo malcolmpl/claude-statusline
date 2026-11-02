@@ -134,20 +134,20 @@ def main():
         sd = rl.get("seven_day") or {}
         s_pct = round(fh.get("used_percentage", 0) or 0, 2)
         w_pct = round(sd.get("used_percentage", 0) or 0, 2)
-        s_reset = fmt_resets_in(fh["resets_at"]) if fh.get("resets_at") else "?"
-        w_reset = fmt_resets_in(sd["resets_at"]) if sd.get("resets_at") else "?"
-        usage_parts.append(render_gauge(s_pct, label="session", suffix=f"resets {s_reset}"))
-        usage_parts.append(render_gauge(w_pct, label="weekly",  suffix=f"resets {w_reset}"))
+        s_reset = f"↻{fmt_resets_in(fh['resets_at'])}" if fh.get("resets_at") else None
+        w_reset = f"↻{fmt_resets_in(sd['resets_at'])}" if sd.get("resets_at") else None
+        usage_parts.append(render_gauge(s_pct, label="5h", suffix=s_reset))
+        usage_parts.append(render_gauge(w_pct, label="7d", suffix=w_reset))
 
     # Location line
     location = [f"{DIM}{dir_display}{RESET}"]
     if branch:
         location.append(f"{DIM}({branch}){RESET}")
-    location.append(f"{DIM}{model_name}{RESET}")
 
     # Usage line
     usage = [
-        render_gauge(used_pct, tail=f"{fmt_tokens(total_tokens)} / {fmt_tokens(window_size)}"),
+        f"{DIM}{model_name}{RESET}",
+        render_gauge(used_pct, label="ctx", tail=f"{fmt_tokens(total_tokens)} / {fmt_tokens(window_size)}"),
         f"{DIM}{session_time}{RESET}",
     ]
     if cc_segment:
