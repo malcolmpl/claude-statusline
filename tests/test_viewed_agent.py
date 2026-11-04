@@ -43,17 +43,59 @@ class TestModelName(unittest.TestCase):
         self.assertIsNone(viewed_agent.model_name(None))
 
 
-class TestContextWindow(unittest.TestCase):
-    def test_known(self):
-        self.assertEqual(viewed_agent.context_window("claude-sonnet-5-5"), 1_000_000)
-        self.assertEqual(viewed_agent.context_window("claude-haiku-4-5"), 200_000)
+M1 = 1_000_000
+K200 = 200_000
 
-    def test_known_with_date_suffix(self):
-        self.assertEqual(viewed_agent.context_window("claude-haiku-4-5-20251001"), 200_000)
+
+class TestDefaultWindow(unittest.TestCase):
+    """Claude Code docs (model-config): Fable, Sonnet 5+, Haiku 5.5, Opus 4.7+
+    run 1M natively; Opus/Sonnet 4.6 reach 1M only via `[1m]`."""
+
+    def test_native_1m(self):
+        for m in ("claude-sonnet-5-5", "claude-sonnet-5", "claude-opus-4-7", "claude-opus-5-5",
+                  "claude-haiku-5-5", "claude-fable-5-1", "claude-fable-5"):
+            self.assertEqual(viewed_agent.default_window(m), M1, m)
+
+    def test_200k_without_suffix(self):
+        for m in ("claude-opus-4-6", "claude-sonnet-4-6", "claude-haiku-4-5",
+                  "claude-haiku-4-5-20251001", "claude-sonnet-4-20250514"):
+            self.assertEqual(viewed_agent.default_window(m), K200, m)
+
+    def test_1m_suffix(self):
+        self.assertEqual(viewed_agent.default_window("claude-opus-4-6[1m]"), M1)
+
+    def test_disable_1m_env(self):
+        env = {"CLAUDE_CODE_DISABLE_1M_CONTEXT": "1"}
+        self.assertEqual(viewed_agent.default_window("claude-sonnet-5-5", env), K200)
 
     def test_unknown(self):
-        self.assertIsNone(viewed_agent.context_window("claude-foo-9-9"))
-        self.assertIsNone(viewed_agent.context_window(None))
+        self.assertIsNone(viewed_agent.default_window("claude-foo-9-9"))
+        self.assertIsNone(viewed_agent.default_window("claude-3-5-sonnet-20241022"))
+        self.assertIsNone(viewed_agent.default_window(None))
+
+
+class TestSubagentWindow(unittest.TestCase):
+    def w(self, model, used=0, main_model=None, main_window=None, env=None):
+        return viewed_agent.subagent_window(model, used, main_model, main_window, env or {})
+
+    def test_same_model_as_main_uses_stdin_window(self):
+        self.assertEqual(self.w("claude-sonnet-5-5", main_model="claude-sonnet-5-5", main_window=K200), K200)
+        self.assertEqual(self.w("claude-opus-4-6", main_model="claude-opus-4-6[1m]", main_window=M1), M1)
+
+    def test_other_model_uses_default(self):
+        self.assertEqual(self.w("claude-haiku-4-5", main_model="claude-opus-5-5", main_window=M1), K200)
+        self.assertEqual(self.w("claude-sonnet-5-5", main_model="claude-opus-4-6", main_window=K200), M1)
+
+    def test_main_capped_at_200k_caps_native_1m(self):
+        # Main runs a native-1M model at 200K: 1M is disabled for the session.
+        self.assertEqual(self.w("claude-sonnet-5-5", main_model="claude-opus-5-5", main_window=K200), K200)
+
+    def test_steps_up_when_usage_exceeds(self):
+        self.assertEqual(self.w("claude-opus-4-6", used=250_000), M1)
+
+    def test_unknown_model(self):
+        self.assertIsNone(self.w("claude-foo-9-9", main_model="claude-opus-5-5", main_window=M1))
+        self.assertIsNone(self.w(None))
 
 
 class TestStateDir(unittest.TestCase):
@@ -157,9 +199,21 @@ class TestSubagentSegments(unittest.TestCase):
 
     def test_ctx_last_turn_total(self):
         # last Turn: input 3 + cache_read 24000 + cache_creation 0 (cc=0 Turn counts)
-        seg = statusline.subagent_segments(self.agent())
+        seg = statusline.subagent_segments(self.agent(), {}, env={})
         self.assertEqual(seg.ctx, render.render_gauge(24003 / 1_000_000 * 100, label="ctx",
                                                       tail=statusline.ctx_tail(24003, 1_000_000)))
+
+    def test_issue_example_200k_sonnet(self):
+        # Main runs Sonnet 5.5 at 200K (1M off): a Sonnet 5.5 subagent gets the same window.
+        a = self.agent(transcript_path=os.path.join(FIX, "subagent_200k.jsonl"))
+        data = {"model": {"id": "claude-sonnet-5-5"}, "context_window": {"context_window_size": 200000}}
+        seg = statusline.subagent_segments(a, data, env={})
+        self.assertIn("24,310 / 200,000", seg.ctx)
+        self.assertIn("12%", seg.ctx)
+
+    def test_window_from_stdin_disable_env(self):
+        seg = statusline.subagent_segments(self.agent(), {}, env={"CLAUDE_CODE_DISABLE_1M_CONTEXT": "1"})
+        self.assertIn("24,003 / 200,000", seg.ctx)
 
     def test_ctx_unknown_window_count_only(self):
         a = self.agent(transcript_path=os.path.join(FIX, "subagent_unknown_model.jsonl"))

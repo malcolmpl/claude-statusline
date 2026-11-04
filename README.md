@@ -88,7 +88,7 @@ Claude Code's statusline stdin always describes the main session and is not re-r
 
 - model — `message.model`, `claude-<family>-<maj>-<min>` → `Family maj.min`, raw id otherwise
 - effort — the record's `effort`, else `meta.json`; omitted when unknown (never the session's)
-- ctx — last turn's input + cache read + cache creation; bar and % from a small model→window table, token count only for an unknown model
+- ctx — last turn's input + cache read + cache creation. The window is sized by the subagent's own model ([docs](https://code.claude.com/docs/en/sub-agents)): the main session's stdin window when the model is the same (covers `[1m]` and 1M-off), else the model's default — 1M for Fable, Sonnet 5+, Haiku 5.5, Opus 4.7+; 200K for older models ([docs](https://code.claude.com/docs/en/model-config)), capped at 200K when `CLAUDE_CODE_DISABLE_1M_CONTEXT` is set or the main session runs a native-1M model at 200K; stepped up to 1M if usage exceeds 200K. Unknown model → token count only, no bar or %
 - cc — last turn with cc > 0, labelled by the TTL ratio heuristic (`prompt_cache` covers the main session only)
 
 A finished subagent keeps its last numbers. If the state file is missing, unreadable, names main, or its transcript is gone, the line shows the main session with no marker. Teammates fall back to main. The mod deletes state files older than 7 days at session start. Without the mod, behaviour is unchanged. See [ADR-0008](docs/adr/0008-mod-sensor-for-viewed-agent.md).

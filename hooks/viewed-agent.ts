@@ -5,21 +5,32 @@
 import type { EngineInterface, Register } from 'claude-code'
 
 const PRUNE_AFTER_MS = 7 * 24 * 60 * 60 * 1000
-const STATE_FILE = /^viewed-agent-.+\.json$/
+// Ids go into file names (and a `del` command line): a safe charset only.
+const SAFE_ID = /^[A-Za-z0-9_-]+$/
+const STATE_FILE = /^viewed-agent-[A-Za-z0-9_-]+\.json$/
+// `<dir>/<stem>/subagents/agent-<id>.jsonl` → main is `<dir>/<stem>.jsonl`
+const SUBAGENT_TRANSCRIPT = /^(.*)[\\/]subagents[\\/]agent-[^\\/]+\.jsonl$/
 
-type Base = { session_id?: string; transcript_path?: string }
+type Base = { transcript_path?: string; agent_transcript_path?: string }
+type Paths = { jsonl: string; meta: string }
 
 export const register: Register = on => {
   let transcriptPath: string | undefined
-  let hookSessionId: string | undefined
   // Last written `agentId|subagentPath`; undefined at load, so the first
   // render always writes and clears a state left by an earlier run.
   let lastWritten: string | undefined
   let queue: Promise<void> = Promise.resolve()
 
+  // Main transcript path from any classic hook; a subagent's own path is
+  // mapped back to its main transcript.
   const remember = (e: Base) => {
-    if (e.transcript_path) transcriptPath = e.transcript_path
-    if (e.session_id) hookSessionId = e.session_id
+    for (const path of [e.transcript_path, e.agent_transcript_path]) {
+      const main = path ? mainTranscript(path) : undefined
+      if (main) {
+        transcriptPath = main
+        return
+      }
+    }
   }
 
   on('classic.SessionStart', ($, e, next) => {
@@ -36,25 +47,43 @@ export const register: Register = on => {
     return next(e)
   }).catch(($, e, next) => next(e))
 
+  // After a mid-session reload, the next subagent start or stop teaches the path.
+  on('classic.SubagentStart', ($, e, next) => {
+    try {
+      remember(e)
+    } catch {}
+    return next(e)
+  }).catch(($, e, next) => next(e))
+
+  on('classic.SubagentStop', ($, e, next) => {
+    try {
+      remember(e)
+    } catch {}
+    return next(e)
+  }).catch(($, e, next) => next(e))
+
   on('session.start', async ($, e, next) => {
     const started = await next(e)
     try {
       await prune($)
     } catch {}
     return started
-  })
+  }).catch(($, e, next) => next(e))
 
   on('ui.render', { component: 'AbovePrompt' }, ($, e, next) => {
     try {
       const view = e.props.view
-      if (view) {
-        const agentId = view.agentId ?? ''
+      const agentId = view?.agentId ?? ''
+      // No view (older Claude Code), an unsafe id, or a subagent whose path is
+      // not known yet (module reloaded mid-session): keep the previous state.
+      const isKnown = view && (agentId === '' || (SAFE_ID.test(agentId) && transcriptPath))
+      if (isKnown) {
         const paths = agentId && transcriptPath ? subagentPaths(transcriptPath, agentId) : undefined
         const key = `${agentId}|${paths?.jsonl ?? ''}`
         if (key !== lastWritten) {
           lastWritten = key
           queue = queue
-            .then(() => writeState($, agentId, paths, hookSessionId))
+            .then(() => writeState($, agentId, paths))
             .catch(() => {
               lastWritten = undefined
             })
@@ -62,16 +91,23 @@ export const register: Register = on => {
       }
     } catch {}
     return next(e)
-  })
+  }).catch(($, e, next) => next(e))
+}
+
+function sepOf(path: string) {
+  return path.includes('\\') ? '\\' : '/'
+}
+
+function mainTranscript(path: string) {
+  const sub = SUBAGENT_TRANSCRIPT.exec(path)
+  if (sub) return `${sub[1]}.jsonl`
+  return /\.jsonl$/.test(path) ? path : undefined
 }
 
 // `<dir>/<stem>.jsonl` → `<dir>/<stem>/subagents/agent-<id>.{jsonl,meta.json}`
-function subagentPaths(mainTranscript: string, agentId: string) {
-  const cut = Math.max(mainTranscript.lastIndexOf('/'), mainTranscript.lastIndexOf('\\'))
-  const sep = cut >= 0 ? mainTranscript[cut] : '/'
-  const dir = mainTranscript.slice(0, cut + 1)
-  const stem = mainTranscript.slice(cut + 1).replace(/\.jsonl$/, '')
-  const base = `${dir}${stem}${sep}subagents${sep}agent-${agentId}`
+function subagentPaths(main: string, agentId: string): Paths {
+  const sep = sepOf(main)
+  const base = `${main.replace(/\.jsonl$/, '')}${sep}subagents${sep}agent-${agentId}`
   return { jsonl: `${base}.jsonl`, meta: `${base}.meta.json` }
 }
 
@@ -79,19 +115,14 @@ function subagentPaths(mainTranscript: string, agentId: string) {
 async function stateDir($: EngineInterface) {
   const home = (await $.env.get('USERPROFILE')) ?? (await $.env.get('HOME'))
   if (!home) return undefined
-  const sep = home.includes('\\') ? '\\' : '/'
+  const sep = sepOf(home)
   return `${home.replace(/[\\/]+$/, '')}${sep}.claude${sep}claude-statusline`
 }
 
-async function writeState(
-  $: EngineInterface,
-  agentId: string,
-  paths: { jsonl: string; meta: string } | undefined,
-  hookSessionId: string | undefined,
-) {
+async function writeState($: EngineInterface, agentId: string, paths: Paths | undefined) {
   const dir = await stateDir($)
-  if (!dir) return
-  const sep = dir.includes('\\') ? '\\' : '/'
+  const sessionId = await $.session.id()
+  if (!dir || !SAFE_ID.test(sessionId)) return
   const state: Record<string, unknown> = { agentId: paths ? agentId : '', transcriptPath: paths?.jsonl ?? '' }
   if (paths) {
     try {
@@ -103,25 +134,18 @@ async function writeState(
       }
     } catch {}
   }
-  const text = JSON.stringify(state)
-  // The statusline keys by stdin `session_id`; write under the hook's id too
-  // if it ever differs from $.session.id().
-  const ids = new Set([await $.session.id(), hookSessionId].filter((x): x is string => !!x))
-  for (const id of ids) {
-    await $.fs.write(`${dir}${sep}viewed-agent-${id}.json`, text)
-  }
+  await $.fs.write(`${dir}${sepOf(dir)}viewed-agent-${sessionId}.json`, JSON.stringify(state))
 }
 
 async function prune($: EngineInterface) {
   const dir = await stateDir($)
   if (!dir || !(await $.fs.exists(dir))) return
-  const sep = dir.includes('\\') ? '\\' : '/'
+  const sep = sepOf(dir)
   const cutoff = (await $.clock.now()) - PRUNE_AFTER_MS
-  const isWindows = (await $.env.get('OS')) === 'Windows_NT'
   for (const entry of await $.fs.list(dir)) {
     if (entry.kind !== 'file' || !STATE_FILE.test(entry.name) || entry.mtimeMs >= cutoff) continue
     const path = `${dir}${sep}${entry.name}`
-    // $.fs has no delete; remove through the host.
-    await $.process.run(isWindows ? ['cmd', '/c', 'del', '/q', path] : ['rm', '-f', path]).catch(() => undefined)
+    // $.fs has no delete; remove through the host (Windows when the path uses `\`).
+    await $.process.run(sep === '\\' ? ['cmd', '/c', 'del', '/q', path] : ['rm', '-f', path]).catch(() => undefined)
   }
 }

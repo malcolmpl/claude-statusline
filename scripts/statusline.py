@@ -2,6 +2,7 @@
 """Claude Code statusline: cwd, git branch, model name, context usage, token count, session time."""
 
 import json
+import os
 import sys
 import subprocess
 from collections import namedtuple
@@ -133,12 +134,16 @@ def ctx_gauge(used, window_size, used_pct=None):
     return render_gauge(used_pct, label="ctx", tail=ctx_tail(used, window_size))
 
 
-def subagent_segments(agent):
+def subagent_segments(agent, data=None, env=None):
     """Model, ctx and cc segments of a Viewed subagent (ADR-0008).
 
     Effort: transcript record, else meta.json; never stdin (session-level).
+    ctx window: the subagent's own model, main's stdin window when the model
+    is the same (viewed_agent.subagent_window).
     cc: ADR-0002 ratio heuristic as classified (prompt_cache excludes subagents).
     """
+    data = data or {}
+    env = os.environ if env is None else env
     tail = latest(agent.transcript_path)
     last = tail.last_turn
     model_id = last.model if last else None
@@ -149,7 +154,11 @@ def subagent_segments(agent):
     cc = tail.cc_turn
     return ViewSegments(
         model=render_model(model, effort, prefix=prefix),
-        ctx=ctx_gauge(used, viewed_agent.context_window(model_id)),
+        ctx=ctx_gauge(used, viewed_agent.subagent_window(
+            model_id, used,
+            (data.get("model") or {}).get("id"),
+            (data.get("context_window") or {}).get("context_window_size"),
+            env)),
         cc=render_cc_segment(cc.cc, cc.kind) if cc else None,
     )
 
@@ -174,7 +183,7 @@ def view_segments(data, state_dir=None):
         state_dir = viewed_agent.state_dir()
     agent = viewed_agent.read_state(data.get("session_id"), state_dir)
     if agent:
-        return subagent_segments(agent)  # main transcript not parsed (1 s refresh)
+        return subagent_segments(agent, data)  # main transcript not parsed (1 s refresh)
     return main_segments(data)
 
 
