@@ -5,8 +5,8 @@ import json
 import sys
 import subprocess
 
-from transcript import last_cc_turn
-from render import DIM, RESET, assemble, render_gauge, render_cc_segment
+from transcript import latest, main_session_kind, miss_label
+from render import DIM, RESET, assemble, render_gauge, render_cc_segment, render_model
 
 # Force UTF-8 output on Windows
 if sys.platform == "win32":
@@ -86,6 +86,38 @@ def fmt_duration(ms):
         return f"{s}s"
 
 
+CTX_SHOW_MAX_BELOW = 1_000_000
+
+
+def ctx_used(current_usage):
+    """Context tokens of the last request: uncached + cache read + cache write."""
+    cu = current_usage or {}
+    return sum(cu.get(k, 0) or 0 for k in
+               ("input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens"))
+
+
+def ctx_tail(used, window_size):
+    """'used / max' for small windows; 'used' alone for 1M+ windows."""
+    if window_size >= CTX_SHOW_MAX_BELOW:
+        return fmt_tokens(used)
+    return f"{fmt_tokens(used)} / {fmt_tokens(window_size)}"
+
+
+def pick_effort(transcript_effort, data):
+    """Effort from the transcript's last assistant record, else stdin `effort.level`."""
+    if transcript_effort:
+        return transcript_effort
+    level = (data.get("effort") or {}).get("level")
+    return str(level) if level else None
+
+
+def main_cc_segment(turn, prompt_cache):
+    """cc segment for the main session (ADR-0009): label from Claude Code's miss cause."""
+    if not turn:
+        return None
+    return render_cc_segment(turn.cc, main_session_kind(turn), miss_label(prompt_cache, turn))
+
+
 def main():
     try:
         raw_stdin = sys.stdin.read()
@@ -106,9 +138,7 @@ def main():
     # Token counts
     current      = cw.get("current_usage") or {}
     window_size  = cw.get("context_window_size") or 200000
-    input_tokens = current.get("input_tokens", 0) or 0
-    cache_read   = current.get("cache_read_input_tokens", 0) or 0
-    total_tokens = input_tokens + cache_read
+    total_tokens = ctx_used(current)
 
     # Percentage
     used_pct = cw.get("used_percentage")
@@ -123,8 +153,9 @@ def main():
     duration_ms = (data.get("cost") or {}).get("total_duration_ms", 0) or 0
     session_time = fmt_duration(duration_ms)
 
-    last = last_cc_turn(data.get("transcript_path"))
-    cc_segment = render_cc_segment(last.cc, last.kind) if last else None
+    lt = latest(data.get("transcript_path"))
+    effort = pick_effort(lt.effort, data)
+    cc_segment = main_cc_segment(lt.cc_turn, data.get("prompt_cache"))
 
     # Claude usage limits — native rate_limits from Claude Code stdin
     rl = data.get("rate_limits") or {}
@@ -146,8 +177,8 @@ def main():
 
     # Usage line
     usage = [
-        f"{DIM}{model_name}{RESET}",
-        render_gauge(used_pct, label="ctx", tail=f"{fmt_tokens(total_tokens)} / {fmt_tokens(window_size)}"),
+        render_model(model_name, effort),
+        render_gauge(used_pct, label="ctx", tail=ctx_tail(total_tokens, window_size)),
         f"{DIM}{session_time}{RESET}",
     ]
     if cc_segment:

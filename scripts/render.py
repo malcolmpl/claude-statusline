@@ -46,11 +46,21 @@ def render_gauge(pct, *, label=None, suffix=None, tail=None):
     return f"{head}{blink}{col}{bar} {pct:.0f}%{RESET}{tail_part}{suff_part}"
 
 
-def render_cc_segment(cc, kind):
-    """Render colored 'cc:Nk' segment. Caller must guard cc>0."""
+def render_model(model, effort):
+    """Model name, with Effort appended when known (never guessed)."""
+    return f"{DIM}{model} {effort}{RESET}" if effort else f"{DIM}{model}{RESET}"
+
+
+def render_cc_segment(cc, kind, miss=None):
+    """Render colored 'cc:Nk' segment. Caller must guard cc>0.
+
+    `miss` is a cache-miss label ('TTL!', 'rebuild!', 'srv?'); it wins over kind.
+    """
     label = fmt_k(cc)
-    if kind == Kind.TTL_REFRESH:
-        return f"{RED}{BOLD}cc:{label} (TTL!){RESET}"
+    if miss is None and kind == Kind.TTL_REFRESH:
+        miss = "TTL!"
+    if miss:
+        return f"{RED}{BOLD}cc:{label} ({miss}){RESET}"
     if kind == Kind.FIRST_TURN:
         return f"{DIM}cc:{label}{RESET}"
     # DATA_LOAD or NORMAL — size-based palette

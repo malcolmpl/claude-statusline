@@ -6,10 +6,10 @@ A Claude Code plugin providing a custom statusline with context usage monitoring
 
 - **Context Usage Bar** — Color-coded progress bar (green < 60%, yellow, orange, red+blink at 80%+) with percentage and token count
 - **Git Branch** — Current branch or detached HEAD hash
-- **Model Info** — Active model display name
+- **Model Info** — Active model display name + effort level
 - **Session Duration** — Time since session start
 - **Rate Limit Monitoring** — Session (5h) and weekly (7d) usage percentages with reset countdown timers, sourced natively from Claude Code's stdin payload
-- **Cache Creation Tracking** — `cc:` segment shows cache_creation_input_tokens of the last turn, with TTL-refresh detection and color-coded thresholds
+- **Cache Creation Tracking** — `cc:` segment shows cache_creation_input_tokens of the last turn, with cache-miss cause labels (TTL / rebuild / server) and color-coded thresholds
 - **/cache-stats command** — Per-turn cache_creation breakdown for the current session with summary and top spikes
 
 ## Requirements
@@ -59,7 +59,7 @@ Restart Claude Code after setup to see the statusline.
 
 ```
 /home/user/project | (master)
-Claude Opus 4.7 | ctx: ▰▰▰▰▱▱▱▱▱▱ 40% 80,000 / 200,000 | 12m30s | cc:1.2k | 5h: ▰▰▰▱▱▱▱▱▱▱ 25% ↻3h42m | 7d: ▰▰▰▰▰▰▱▱▱▱ 58% ↻4d12h
+Opus 5.5 high | ctx: ▰▰▰▰▱▱▱▱▱▱ 40% 80,000 / 200,000 | 12m30s | cc:1.2k | 5h: ▰▰▰▱▱▱▱▱▱▱ 25% ↻3h42m | 7d: ▰▰▰▰▰▰▱▱▱▱ 58% ↻4d12h
 ```
 
 Two lines, segments separated by `|`.
@@ -69,8 +69,8 @@ Line 1 — location:
 - Git branch (if in a repo)
 
 Line 2 — usage:
-- Model name
-- `ctx:` context usage bar + percentage + token count (current / window size)
+- Model name + effort (`low`…`max`, from the transcript, else stdin `effort.level`; omitted when unknown)
+- `ctx:` context usage bar + percentage + token count (`used / window size`; `used` only for 1M+ windows). `used` = input + cache read + cache creation
 - Session duration
 - `cc:` cache_creation tokens of the last turn (omitted on cold start)
 - `5h:` 5-hour rate limit with time until reset (`↻`)
@@ -93,14 +93,18 @@ Context usage bar:
 
 | Condition           | Render                       |
 |---------------------|------------------------------|
-| First turn          | `cc:Nk (init)` yellow        |
-| TTL refresh         | `cc:Nk (TTL!)` red bold      |
+| Cache miss: TTL     | `cc:Nk (TTL!)` red bold      |
+| Cache miss: tools / system prompt changed | `cc:Nk (rebuild!)` red bold |
+| Cache miss: server side | `cc:Nk (srv?)` red bold  |
+| First turn          | gray (init noise)            |
 | < 2k                | gray                         |
 | 2k–10k              | yellow                       |
 | 10k–30k             | `cc:Nk ⚠` red bold           |
 | ≥ 30k               | `cc:Nk ‼` red inverse        |
 
-TTL refresh = current `cc > 80%` of previous `cache_read_input_tokens` (with previous ≥ 5k), indicating the 5-minute prompt cache TTL expired and the prefix was re-cached.
+Cache-miss labels come from Claude Code's stdin `prompt_cache.last_miss_cause` (CC ≥ 2.1.260) and show only on the turn whose time matches `prompt_cache.last_miss_at` (the cause persists until the next miss). Without `prompt_cache`, the size palette applies with no label. See [ADR-0009](docs/adr/0009-cache-miss-cause-from-stdin.md).
+
+The ratio heuristic — `cc > 80%` of previous `cache_read_input_tokens` (previous ≥ 5k) — is kept only for `/cache-stats` (and subagent turns).
 
 ### /claude-statusline:cache-stats
 

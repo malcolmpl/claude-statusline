@@ -1,0 +1,2 @@
+{"type":"user","timestamp":"2026-11-04T10:00:00.000Z","message":{"content":"hi"}}
+{"type":"assistant","timestamp":"2026-11-04T10:00:05.000Z","message":{"id":"m1","usage":{"cache_creation_input_tokens":25000,"cache_read_input_tokens":0}}}
