@@ -1,0 +1,2 @@
+{"type":"user","timestamp":"2026-11-04T10:00:00.000Z","message":{"content":"go"}}
+{"type":"assistant","timestamp":"2026-11-04T10:00:05.000Z","effort":"high","message":{"id":"m1","model":"claude-foo-9-9","usage":{"input_tokens":10,"cache_creation_input_tokens":300,"cache_read_input_tokens":12000}}}

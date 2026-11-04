@@ -46,9 +46,19 @@ def render_gauge(pct, *, label=None, suffix=None, tail=None):
     return f"{head}{blink}{col}{bar} {pct:.0f}%{RESET}{tail_part}{suff_part}"
 
 
-def render_model(model, effort):
-    """Model name, with Effort appended when known (never guessed)."""
-    return f"{DIM}{model} {effort}{RESET}" if effort else f"{DIM}{model}{RESET}"
+def render_model(model, effort, prefix=None):
+    """Model name, with Effort appended when known (never guessed).
+
+    `prefix` (e.g. '↳Explore') marks a Viewed subagent.
+    """
+    parts = [p for p in (prefix, model, effort) if p]
+    return f"{DIM}{' '.join(parts)}{RESET}"
+
+
+def render_count(text, *, label=None):
+    """Gauge stand-in when no max is known: label + count, no bar or %."""
+    head = f"{DIM}{label}:{RESET} " if label else ""
+    return f"{head}{text}"
 
 
 def render_cc_segment(cc, kind, miss=None):

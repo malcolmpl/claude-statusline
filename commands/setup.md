@@ -30,6 +30,17 @@ Update `~/.claude/settings.json` `statusLine` to:
 
 Then verify: pipe `{}` into the resolved command and confirm it prints a statusline and exits 0.
 
+## Step 1b: Enable the viewed-agent mod and the 1 s refresh
+
+The plugin ships a mod (`hooks/hooks.json` → `hooks/viewed-agent.ts`) that tells the statusline which agent is in the main view, so model, effort, ctx and cc follow a foregrounded subagent (ADR-0008). It loads with the plugin; there is nothing to copy.
+
+1. Make sure the plugin is enabled: in `~/.claude/settings.json`, `enabledPlugins` must hold `"claude-statusline@claude-statusline-marketplace": true` (add it if missing; leave other entries alone). For a local `--plugin-dir` checkout, skip this item.
+2. Only if the plugin is enabled (item 1) or loaded via `--plugin-dir`, add `"refreshInterval": 1` to the `statusLine` object from Step 1, keeping `type` and `command`:
+   ```json
+   { "type": "command", "command": "python3 <resolved-absolute-root>/scripts/statusline.py", "refreshInterval": 1 }
+   ```
+   Claude Code does not re-run the statusline on a view switch, so the 1 s refresh is what picks the switch up (one ~105 ms Python run per second). Without the mod, do not set `refreshInterval`: the statusline then shows the main session only, unchanged.
+
 ## Step 2: Enable git hooks (optional, local dev only)
 
 Only if the plugin was resolved from the repo working directory (option 3 in Step 1), ask the user if they want to enable auto-version-bump git hooks for development.
@@ -43,5 +54,6 @@ Tell the user setup is complete. The statusline shows:
 - Context usage bar (color-coded: green/yellow/orange/red+blink)
 - Token count, session duration
 - Claude usage limits: session (5h) + weekly (7d) with reset timers
+- When a subagent is foregrounded (`f` in `/tasks`, or Enter in the agent panel): `↳<agentType>` and that subagent's model, effort, ctx and cc, within ~1 s
 
 Restart Claude Code to see the new statusline.

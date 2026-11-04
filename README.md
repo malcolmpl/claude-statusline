@@ -10,6 +10,7 @@ A Claude Code plugin providing a custom statusline with context usage monitoring
 - **Session Duration** — Time since session start
 - **Rate Limit Monitoring** — Session (5h) and weekly (7d) usage percentages with reset countdown timers, sourced natively from Claude Code's stdin payload
 - **Cache Creation Tracking** — `cc:` segment shows cache_creation_input_tokens of the last turn, with cache-miss cause labels (TTL / rebuild / server) and color-coded thresholds
+- **Viewed agent** — Foreground a subagent (`f` in `/tasks`, or Enter in the agent panel) and model, effort, ctx and cc switch to it, prefixed with a dimmed `↳<agentType>`. Session time and the 5h/7d gauges stay global
 - **/cache-stats command** — Per-turn cache_creation breakdown for the current session with summary and top spikes
 
 ## Requirements
@@ -51,7 +52,8 @@ After installing, run `/claude-statusline:setup` to configure the statusline and
 
 Run `/claude-statusline:setup` to:
 1. Configure `settings.json` statusline command
-2. Optionally enable git hooks for development
+2. Enable the viewed-agent mod and set `statusLine.refreshInterval: 1`
+3. Optionally enable git hooks for development
 
 Restart Claude Code after setup to see the statusline.
 
@@ -75,6 +77,21 @@ Line 2 — usage:
 - `cc:` cache_creation tokens of the last turn (omitted on cold start)
 - `5h:` 5-hour rate limit with time until reset (`↻`)
 - `7d:` 7-day rate limit with time until reset (`↻`)
+
+### Viewed agent (subagents)
+
+```
+↳Explore Sonnet 5.5 medium | ctx: ▱▱▱▱▱▱▱▱▱▱ 2% 24,310 | 46m07s | cc:1.2k | 5h: … | 7d: …
+```
+
+Claude Code's statusline stdin always describes the main session and is not re-run on a view switch. The plugin ships a small mod (`hooks/viewed-agent.ts`) whose `AbovePrompt` hook renders nothing and, on each view switch, writes `~/.claude/claude-statusline/viewed-agent-<session_id>.json` (subagent transcript path, `agentType`, and model/effort from `agent-<id>.meta.json`). With `refreshInterval: 1` the statusline reads that file and takes, from the subagent's transcript:
+
+- model — `message.model`, `claude-<family>-<maj>-<min>` → `Family maj.min`, raw id otherwise
+- effort — the record's `effort`, else `meta.json`; omitted when unknown (never the session's)
+- ctx — last turn's input + cache read + cache creation; bar and % from a small model→window table, token count only for an unknown model
+- cc — last turn with cc > 0, labelled by the TTL ratio heuristic (`prompt_cache` covers the main session only)
+
+A finished subagent keeps its last numbers. If the state file is missing, unreadable, names main, or its transcript is gone, the line shows the main session with no marker. Teammates fall back to main. The mod deletes state files older than 7 days at session start. Without the mod, behaviour is unchanged. See [ADR-0008](docs/adr/0008-mod-sensor-for-viewed-agent.md).
 
 Rate limit data comes from the `rate_limits` field in Claude Code's statusline stdin payload — no external dependencies, no caching layer.
 
@@ -120,6 +137,8 @@ Run `/claude-statusline:cache-stats` (or `python scripts/cache_stats.py [transcr
 ## Architecture
 
 - `scripts/statusline.py` — Main statusline script, reads JSON from stdin (Claude Code statusline protocol), outputs ANSI-formatted text
+- `scripts/viewed_agent.py` — Reads the mod's viewed-agent state file; model id → name and context-window table
+- `hooks/viewed-agent.ts` — Mod (function hooks) sensing the Viewed agent; tests in `hooks/viewed-agent.test.tsx` (`claude plugin test .`)
 - `scripts/cache_stats.py` — Per-turn `cache_creation_input_tokens` analyzer for a session transcript
 - `commands/setup.md` — `/claude-statusline:setup` slash command for automated installation
 - `commands/cache-stats.md` — `/claude-statusline:cache-stats` slash command wrapping `cache_stats.py`

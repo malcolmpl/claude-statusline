@@ -38,12 +38,20 @@ class ClassifiedTurn:
     # roughly when the request was sent. Lower bound for miss matching.
     request_timestamp: Optional[str] = None
     effort: Optional[str] = None
+    input_tokens: int = 0
+    model: Optional[str] = None
+
+    @property
+    def ctx_tokens(self):
+        """Context of this request: uncached input + cache read + cache write."""
+        return self.input_tokens + self.cache_read + self.cc
 
 
 @dataclass
 class Latest:
     cc_turn: Optional[ClassifiedTurn]  # last Turn with cc>0
     effort: Optional[str]              # top-level `effort` of the last assistant record
+    last_turn: Optional[ClassifiedTurn] = None  # last Turn overall (incl. cc=0)
 
 
 _NON_PROMPT_PREFIXES = ("<local-command-caveat>", "<command-name>", "<system-reminder>")
@@ -106,11 +114,11 @@ def turns(path) -> Iterator[ClassifiedTurn]:
         return
     window_prompt_pos = 0
     prev_cr = 0
-    pending = None  # (cc, cr, content, msg_id, pos, ts, request_ts, effort)
+    pending = None  # (cc, cr, content, msg_id, pos, ts, request_ts, effort, input, model)
     last_ts = None  # timestamp of the last record read
 
     def build(rec):
-        cc, cr, content, _mid, pos, ts, req_ts, effort = rec
+        cc, cr, content, _mid, pos, ts, req_ts, effort, inp, model = rec
         return ClassifiedTurn(
             cc=cc,
             cache_read=cr,
@@ -120,6 +128,8 @@ def turns(path) -> Iterator[ClassifiedTurn]:
             kind=_classify(cc, prev_cr, pos),
             request_timestamp=req_ts,
             effort=effort,
+            input_tokens=inp,
+            model=model,
         )
 
     try:
@@ -145,7 +155,8 @@ def turns(path) -> Iterator[ClassifiedTurn]:
                     same = pending is not None and mid is not None and pending[3] == mid
                     req_ts = pending[6] if same else ts_before
                     rec = (cc, cr, msg.get("content"), mid, window_prompt_pos,
-                           obj.get("timestamp"), req_ts, effort)
+                           obj.get("timestamp"), req_ts, effort,
+                           usage.get("input_tokens", 0) or 0, msg.get("model"))
                     if not same and pending is not None:
                         yield build(pending)
                         prev_cr = pending[1]
@@ -169,14 +180,14 @@ def turns(path) -> Iterator[ClassifiedTurn]:
 
 
 def latest(path) -> Latest:
-    """One pass: last Turn with cc>0 and the last assistant record's effort."""
+    """One pass: last Turn with cc>0, last Turn overall, last record's effort."""
     last_cc = None
-    effort = None
+    last = None
     for t in turns(path):
-        effort = t.effort
+        last = t
         if t.cc > 0:
             last_cc = t
-    return Latest(cc_turn=last_cc, effort=effort)
+    return Latest(cc_turn=last_cc, effort=last.effort if last else None, last_turn=last)
 
 
 def last_cc_turn(path) -> Optional[ClassifiedTurn]:

@@ -4,9 +4,11 @@
 import json
 import sys
 import subprocess
+from collections import namedtuple
 
 from transcript import latest, main_session_kind, miss_label
-from render import DIM, RESET, assemble, render_gauge, render_cc_segment, render_model
+from render import DIM, RESET, assemble, render_count, render_gauge, render_cc_segment, render_model
+import viewed_agent
 
 # Force UTF-8 output on Windows
 if sys.platform == "win32":
@@ -118,6 +120,64 @@ def main_cc_segment(turn, prompt_cache):
     return render_cc_segment(turn.cc, main_session_kind(turn), miss_label(prompt_cache, turn))
 
 
+ViewSegments = namedtuple("ViewSegments", "model ctx cc")
+
+
+def ctx_gauge(used, window_size, used_pct=None):
+    """Context Gauge; count only when the window is unknown."""
+    if not window_size:
+        return render_count(fmt_tokens(used), label="ctx")
+    if used_pct is None:
+        used_pct = used / window_size * 100.0
+    used_pct = min(100.0, max(0.0, float(used_pct)))
+    return render_gauge(used_pct, label="ctx", tail=ctx_tail(used, window_size))
+
+
+def subagent_segments(agent):
+    """Model, ctx and cc segments of a Viewed subagent (ADR-0008).
+
+    Effort: transcript record, else meta.json; never stdin (session-level).
+    cc: ADR-0002 ratio heuristic as classified (prompt_cache excludes subagents).
+    """
+    tail = latest(agent.transcript_path)
+    last = tail.last_turn
+    model_id = last.model if last else None
+    model = viewed_agent.model_name(model_id) or agent.model or "?"
+    effort = tail.effort or agent.effort
+    prefix = f"↳{agent.agent_type}" if agent.agent_type else "↳agent"
+    used = last.ctx_tokens if last else 0
+    cc = tail.cc_turn
+    return ViewSegments(
+        model=render_model(model, effort, prefix=prefix),
+        ctx=ctx_gauge(used, viewed_agent.context_window(model_id)),
+        cc=render_cc_segment(cc.cc, cc.kind) if cc else None,
+    )
+
+
+def main_segments(data):
+    """Model, ctx and cc segments of the main session (stdin + main transcript)."""
+    model_name = (data.get("model") or {}).get("display_name", "Claude")
+    cw = data.get("context_window") or {}
+    window_size = cw.get("context_window_size") or 200000
+    total_tokens = ctx_used(cw.get("current_usage") or {})
+    tail = latest(data.get("transcript_path"))
+    return ViewSegments(
+        model=render_model(model_name, pick_effort(tail.effort, data)),
+        ctx=ctx_gauge(total_tokens, window_size, cw.get("used_percentage")),
+        cc=main_cc_segment(tail.cc_turn, data.get("prompt_cache")),
+    )
+
+
+def view_segments(data, state_dir=None):
+    """Segments of the Viewed agent: a subagent per the mod's state file, else main."""
+    if state_dir is None:
+        state_dir = viewed_agent.state_dir()
+    agent = viewed_agent.read_state(data.get("session_id"), state_dir)
+    if agent:
+        return subagent_segments(agent)  # main transcript not parsed (1 s refresh)
+    return main_segments(data)
+
+
 def main():
     try:
         raw_stdin = sys.stdin.read()
@@ -125,9 +185,7 @@ def main():
     except Exception:
         data = {}
 
-    model_name = (data.get("model") or {}).get("display_name", "Claude")
     cwd = (data.get("workspace") or {}).get("current_dir", "") or data.get("cwd", "")
-    cw = data.get("context_window") or {}
 
     # Directory display
     dir_display = cwd if cwd else "?"
@@ -135,27 +193,11 @@ def main():
     # Git branch
     branch = get_git_branch(cwd)
 
-    # Token counts
-    current      = cw.get("current_usage") or {}
-    window_size  = cw.get("context_window_size") or 200000
-    total_tokens = ctx_used(current)
-
-    # Percentage
-    used_pct = cw.get("used_percentage")
-    if used_pct is not None:
-        used_pct = float(used_pct)
-    else:
-        used_pct = (total_tokens / window_size * 100.0) if window_size else 0.0
-
-    used_pct = min(100.0, max(0.0, used_pct))
-
     # Session duration from cost.total_duration_ms
     duration_ms = (data.get("cost") or {}).get("total_duration_ms", 0) or 0
     session_time = fmt_duration(duration_ms)
 
-    tail = latest(data.get("transcript_path"))
-    effort = pick_effort(tail.effort, data)
-    cc_segment = main_cc_segment(tail.cc_turn, data.get("prompt_cache"))
+    view = view_segments(data)
 
     # Claude usage limits — native rate_limits from Claude Code stdin
     rl = data.get("rate_limits") or {}
@@ -176,13 +218,9 @@ def main():
         location.append(f"{DIM}({branch}){RESET}")
 
     # Usage line
-    usage = [
-        render_model(model_name, effort),
-        render_gauge(used_pct, label="ctx", tail=ctx_tail(total_tokens, window_size)),
-        f"{DIM}{session_time}{RESET}",
-    ]
-    if cc_segment:
-        usage.append(cc_segment)
+    usage = [view.model, view.ctx, f"{DIM}{session_time}{RESET}"]
+    if view.cc:
+        usage.append(view.cc)
     usage += usage_parts
 
     print(assemble(location, usage))
