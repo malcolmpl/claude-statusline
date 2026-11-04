@@ -16,6 +16,7 @@ from typing import Iterator, Optional
 
 TTL_RATIO = 0.8
 TTL_MIN_PREV = 5000
+DATA_LOAD_MIN = 10000
 
 
 class Kind(Enum):
@@ -81,9 +82,14 @@ def _classify(cc, prev_cache_read, window_prompt_pos):
     # ADR-0004: TTL fires independently inside the first turn.
     if prev_cache_read > TTL_MIN_PREV and cc / prev_cache_read > TTL_RATIO:
         return Kind.TTL_REFRESH
+    return _size_kind(cc, window_prompt_pos)
+
+
+def _size_kind(cc, window_prompt_pos):
+    """Kind without the TTL ratio: first turn, data load or normal."""
     if window_prompt_pos == 1:
         return Kind.FIRST_TURN
-    if cc >= 10000:
+    if cc >= DATA_LOAD_MIN:
         return Kind.DATA_LOAD
     return Kind.NORMAL
 
@@ -231,9 +237,7 @@ def main_session_kind(turn) -> Kind:
     """Turn kind without the ADR-0002 ratio heuristic (main session, ADR-0009)."""
     if turn.kind != Kind.TTL_REFRESH:
         return turn.kind
-    if turn.window_prompt_pos == 1:
-        return Kind.FIRST_TURN
-    return Kind.DATA_LOAD if turn.cc >= 10000 else Kind.NORMAL
+    return _size_kind(turn.cc, turn.window_prompt_pos)
 
 
 def fmt_k(n):

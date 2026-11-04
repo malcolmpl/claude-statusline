@@ -86,7 +86,7 @@ def fmt_duration(ms):
         return f"{s}s"
 
 
-CTX_SHOW_MAX_BELOW = 1_000_000
+CTX_USED_ONLY_FROM = 1_000_000
 
 
 def ctx_used(current_usage):
@@ -98,7 +98,7 @@ def ctx_used(current_usage):
 
 def ctx_tail(used, window_size):
     """'used / max' for small windows; 'used' alone for 1M+ windows."""
-    if window_size >= CTX_SHOW_MAX_BELOW:
+    if window_size >= CTX_USED_ONLY_FROM:
         return fmt_tokens(used)
     return f"{fmt_tokens(used)} / {fmt_tokens(window_size)}"
 
@@ -153,9 +153,9 @@ def main():
     duration_ms = (data.get("cost") or {}).get("total_duration_ms", 0) or 0
     session_time = fmt_duration(duration_ms)
 
-    lt = latest(data.get("transcript_path"))
-    effort = pick_effort(lt.effort, data)
-    cc_segment = main_cc_segment(lt.cc_turn, data.get("prompt_cache"))
+    tail = latest(data.get("transcript_path"))
+    effort = pick_effort(tail.effort, data)
+    cc_segment = main_cc_segment(tail.cc_turn, data.get("prompt_cache"))
 
     # Claude usage limits — native rate_limits from Claude Code stdin
     rl = data.get("rate_limits") or {}
