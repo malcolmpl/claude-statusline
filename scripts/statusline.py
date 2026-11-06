@@ -5,11 +5,17 @@ import json
 import os
 import sys
 import subprocess
+import threading
 from collections import namedtuple
 
 from transcript import latest, main_session_kind, miss_label
 from render import DIM, RESET, assemble, render_count, render_gauge, render_cc_segment, render_model
 import viewed_agent
+
+# Run deadlines (#3): a stdin pipe that is never closed, or any other hang,
+# must not leave the process alive. Module-level so tests can lower them.
+STDIN_TIMEOUT_S = 2.0
+WATCHDOG_S = 5.0
 
 # Force UTF-8 output on Windows
 if sys.platform == "win32":
@@ -187,9 +193,40 @@ def view_segments(data, state_dir=None):
     return main_segments(data)
 
 
+def start_watchdog():
+    """Hard-exit (no output) wherever the run is stuck once WATCHDOG_S elapses."""
+    timer = threading.Timer(WATCHDOG_S, os._exit, args=(0,))
+    timer.daemon = True
+    timer.start()
+
+
+def read_stdin():
+    """Read stdin to EOF, or hard-exit silently after STDIN_TIMEOUT_S.
+
+    A daemon thread + join, because select/non-blocking reads do not work on
+    Windows anonymous pipes. os._exit, because the blocked reader thread
+    would otherwise keep the process alive.
+    """
+    box = []
+
+    def reader():
+        try:
+            box.append(sys.stdin.read())
+        except Exception:
+            box.append("")
+
+    t = threading.Thread(target=reader, daemon=True)
+    t.start()
+    t.join(STDIN_TIMEOUT_S)
+    if t.is_alive():
+        os._exit(0)
+    return box[0] if box else ""
+
+
 def main():
+    start_watchdog()
     try:
-        raw_stdin = sys.stdin.read()
+        raw_stdin = read_stdin()
         data = json.loads(raw_stdin) if raw_stdin.strip() else {}
     except Exception:
         data = {}
