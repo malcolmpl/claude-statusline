@@ -4,13 +4,13 @@
 import json
 import os
 import sys
-import subprocess
 import threading
 from collections import namedtuple
 
 from transcript import latest, main_session_kind, miss_label
 from render import DIM, RESET, assemble, render_count, render_gauge, render_cc_segment, render_model
 import viewed_agent
+import reaper
 
 # Run deadlines (#3): a stdin pipe that is never closed, or any other hang,
 # must not leave the process alive. Module-level so tests can lower them.
@@ -21,33 +21,48 @@ WATCHDOG_S = 5.0
 if sys.platform == "win32":
     sys.stdout.reconfigure(encoding="utf-8")
 
-# Hide console window for subprocesses on Windows
-_SUBPROCESS_KWARGS = {}
-if sys.platform == "win32":
-    _si = subprocess.STARTUPINFO()
-    _si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-    _si.wShowWindow = 0  # SW_HIDE
-    _SUBPROCESS_KWARGS["startupinfo"] = _si
+
+def _find_git_dir(cwd):
+    """Git dir of the repo holding cwd: walk up to `.git`, follow a `gitdir:` file."""
+    d = os.path.abspath(cwd)
+    while True:
+        dot_git = os.path.join(d, ".git")
+        if os.path.isdir(dot_git):
+            return dot_git
+        if os.path.isfile(dot_git):  # worktree / submodule
+            with open(dot_git, encoding="utf-8") as f:
+                line = f.readline().strip()
+            if not line.startswith("gitdir:"):
+                return None
+            return os.path.normpath(os.path.join(d, line[len("gitdir:"):].strip()))
+        parent = os.path.dirname(d)
+        if parent == d:
+            return None
+        d = parent
 
 
 def get_git_branch(cwd):
+    """Branch name, or short SHA on detached HEAD; read from HEAD, no `git` spawn (#5)."""
     if not cwd:
         return None
     try:
-        result = subprocess.run(
-            ["git", "-C", cwd, "--no-optional-locks", "symbolic-ref", "--short", "HEAD"],
-            capture_output=True, text=True, timeout=2, **_SUBPROCESS_KWARGS,
-        )
-        if result.returncode == 0:
-            return result.stdout.strip()
-        result2 = subprocess.run(
-            ["git", "-C", cwd, "--no-optional-locks", "rev-parse", "--short", "HEAD"],
-            capture_output=True, text=True, timeout=2, **_SUBPROCESS_KWARGS,
-        )
-        if result2.returncode == 0:
-            return result2.stdout.strip()
+        git_dir = _find_git_dir(cwd)
+        if not git_dir:
+            return None
+        with open(os.path.join(git_dir, "HEAD"), encoding="utf-8") as f:
+            head = f.read().strip()
     except Exception:
-        pass
+        return None
+    if head.startswith("ref:"):
+        ref = head[4:].strip()
+        if ref == "refs/heads/.invalid":  # reftable backend: real HEAD is not in this file
+            return None
+        for prefix in ("refs/heads/", "refs/remotes/", "refs/tags/", "refs/"):
+            if ref.startswith(prefix):  # as `git symbolic-ref --short`
+                return ref[len(prefix):]
+        return ref
+    if len(head) >= 7 and all(c in "0123456789abcdef" for c in head.lower()):
+        return head[:7]
     return None
 
 
@@ -269,7 +284,9 @@ def main():
         usage.append(view.cc)
     usage += usage_parts
 
-    print(assemble(location, usage))
+    print(assemble(location, usage), flush=True)
+    # After the output: a rare (once per window) reap must not delay the line.
+    reaper.run(os.path.abspath(__file__), viewed_agent.state_dir())
 
 
 if __name__ == "__main__":
