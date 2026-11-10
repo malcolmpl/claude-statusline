@@ -20,13 +20,17 @@ Resolve the plugin root by **discovering** it (don't hardcode the dir name — i
 
 Resolve the chosen root to an **absolute** path (expand `~`/`$HOME`) and build `<root>/scripts/statusline.py` with forward slashes.
 
+Resolve the **real interpreter**, not a launcher: run `python3 -c "import sys; print(sys.executable)"` (if `python3` is missing, use `python`). Use the printed path with forward slashes; wrap it in double quotes if it contains a space. Do not write a bare `python3`/`python`: on Windows that is often a shim (scoop, pyenv-win) which starts the real `python.exe` suspended and resumes it later. When Claude Code cancels a run inside that gap, the interpreter stays suspended forever (#5). If the printed path holds a version dir (e.g. `scoop/apps/python/3.13.1/`) and a sibling `current/` holds the same `python.exe`, use the `current/` path so an interpreter update does not break the statusline.
+
 Update `~/.claude/settings.json` `statusLine` to:
 ```json
 {
   "type": "command",
-  "command": "python3 <resolved-absolute-root>/scripts/statusline.py"
+  "command": "<resolved-interpreter> <resolved-absolute-root>/scripts/statusline.py"
 }
 ```
+
+If `statusLine` already exists (e.g. `python3 .../statusline.py` from an earlier setup), Edit only the `command` value; keep `refreshInterval` and every other key.
 
 Then verify: pipe `{}` into the resolved command and confirm it prints a statusline and exits 0.
 
@@ -37,9 +41,9 @@ The plugin ships a mod (`hooks/hooks.json` → `hooks/viewed-agent.ts`) that tel
 1. Make sure the plugin is enabled: in `~/.claude/settings.json`, `enabledPlugins` must hold `"claude-statusline@claude-statusline-marketplace": true` (add it if missing; leave other entries alone). For a local `--plugin-dir` checkout, skip this item.
 2. Only if the plugin is enabled (item 1) or loaded via `--plugin-dir`, add `"refreshInterval": 1` to the `statusLine` object from Step 1, keeping `type` and `command`:
    ```json
-   { "type": "command", "command": "python3 <resolved-absolute-root>/scripts/statusline.py", "refreshInterval": 1 }
+   { "type": "command", "command": "<resolved-interpreter> <resolved-absolute-root>/scripts/statusline.py", "refreshInterval": 1 }
    ```
-   Claude Code does not re-run the statusline on a view switch, so the 1 s refresh is what picks the switch up (one ~105 ms Python run per second). Without the mod, do not set `refreshInterval`: the statusline then shows the main session only, unchanged.
+   Claude Code does not re-run the statusline on a view switch, so the 1 s refresh is what picks the switch up (one Python run per second, ~0.15-0.45 s each on Windows). Without the mod, do not set `refreshInterval`: the statusline then shows the main session only, unchanged.
 
 ## Step 2: Enable git hooks (optional, local dev only)
 

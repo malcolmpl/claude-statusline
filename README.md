@@ -130,13 +130,15 @@ Run `/claude-statusline:cache-stats` (or `python scripts/cache_stats.py [transcr
 ## Compatibility
 
 - Windows, macOS, Linux
-- Python subprocess uses `STARTUPINFO` on Windows to hide console flashes
+- No subprocess per run: git branch read from `.git/HEAD` (worktrees, submodules via `gitdir:`)
+- Windows: a throttled sweep reaps statusline processes left suspended by a killed launcher (ADR-0010)
 - Git hook uses portable sed (GNU + BSD detection)
 - All paths use `os.path` for cross-platform compatibility
 
 ## Architecture
 
 - `scripts/statusline.py` — Main statusline script, reads JSON from stdin (Claude Code statusline protocol), outputs ANSI-formatted text
+- `scripts/reaper.py` — Windows: throttled sweep killing statusline processes left suspended by a killed launcher (ADR-0010)
 - `scripts/viewed_agent.py` — Reads the mod's viewed-agent state file; model id → name and context-window table
 - `hooks/viewed-agent.ts` — Mod (function hooks) sensing the Viewed agent; tests in `hooks/viewed-agent.test.tsx` (`claude plugin test .`)
 - `scripts/cache_stats.py` — Per-turn `cache_creation_input_tokens` analyzer for a session transcript

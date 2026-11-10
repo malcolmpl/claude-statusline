@@ -30,3 +30,4 @@ Claude Code statusline plugin: a Python script Claude Code invokes each turn to 
 - [ADR-0007](./docs/adr/0007-update-stable-install-path.md) — Install paths use the non-versioned marketplace clone, not the versioned cache
 - [ADR-0008](./docs/adr/0008-mod-sensor-for-viewed-agent.md) — A mod senses the Viewed agent; the Python statusline still renders
 - [ADR-0009](./docs/adr/0009-cache-miss-cause-from-stdin.md) — Main-session cache misses use Claude Code's reported cause
+- [ADR-0010](./docs/adr/0010-reaper-for-suspended-leftovers.md) — A later run reaps statusline processes left suspended by a killed launcher

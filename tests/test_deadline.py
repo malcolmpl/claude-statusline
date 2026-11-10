@@ -2,7 +2,7 @@
 
 Subprocess-based: each test spawns the real script and kills it in cleanup.
 """
-import json, os, subprocess, sys, time, unittest
+import json, os, shutil, subprocess, sys, tempfile, time, unittest
 
 SCRIPTS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "scripts")
 SCRIPT = os.path.join(SCRIPTS, "statusline.py")
@@ -13,8 +13,13 @@ MARGIN_S = 2.5  # interpreter startup + scheduling slack
 
 
 class TestDeadline(unittest.TestCase):
+    def setUp(self):
+        self.state = tempfile.mkdtemp()  # reaper stamps stay out of ~/.claude
+        self.addCleanup(shutil.rmtree, self.state, True)
+
     def spawn(self, args):
-        p = subprocess.Popen(args, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        env = dict(os.environ, CLAUDE_STATUSLINE_STATE_DIR=self.state)
+        p = subprocess.Popen(args, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env)
         self.addCleanup(self.reap, p)
         return p
 
@@ -46,6 +51,20 @@ class TestDeadline(unittest.TestCase):
         code, out = self.run_with(b"")
         self.assertEqual(code, 0)
         self.assertIn("?", out)
+
+    @unittest.skipUnless(sys.platform == "win32", "reaper is Windows-only")
+    def test_run_reaps_suspended_leftover_after_output(self):
+        fake = os.path.join(self.state, "scripts", "statusline.py")
+        orphan = subprocess.Popen([sys.executable, fake], creationflags=0x4)  # CREATE_SUSPENDED
+        self.addCleanup(lambda: (orphan.poll() is None and orphan.kill(), orphan.wait()))
+        code = (
+            f"import sys; sys.path.insert(0, {SCRIPTS!r}); import statusline as s, reaper; "
+            f"reaper.REAP_AGE_S = 0; s.__file__ = {fake!r}; s.main()"
+        )
+        out, _ = self.spawn([sys.executable, "-c", code]).communicate(b"{}", timeout=10)
+        self.assertIn(b"?", out)
+        orphan.wait(timeout=5)
+        self.assertTrue(any(n.startswith("reap-") for n in os.listdir(self.state)))
 
     def test_watchdog_fires_on_hang_after_stdin(self):
         watchdog = 0.5
